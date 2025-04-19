@@ -131,6 +131,16 @@ timeConditions = timeLib.getTimeConditions()
 - Implement helper functions for repetitive tasks
 - Cache frequently used calculations
 
+### Future Optimization Opportunities
+- **Anchored VWAP**: Cache historical VWAP calculations in arrays; reduce line redraws
+- **Candle Confluence/ATR**: Consolidate security() calls; pre-compute common conditions
+- **Moving Average Labels**: Batch security() calls; create unified helper functions
+- **Multi-symbol**: Cache time checks; use vector operations for histogram calculations
+- **Mega TICKS**: Combine security() calls for stock data; use persistent variables
+- **Market Structure**: Add timeframe validation helpers; consolidate pivot calculations
+- **Correlations**: Batch security() calls; pre-calculate time conditions once per bar
+- **Trading Hours**: Cache time range checks; consolidate breakout function calls
+
 ## Usage
 
 1. Each script can be copied directly into TradingView's Pine Editor
