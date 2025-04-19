@@ -1,0 +1,576 @@
+//@version=5
+//============================================================================
+// TITLE: Moving Average Labels Indicator
+// DESCRIPTION: Displays various moving averages, VWAP lines, and price levels
+//============================================================================
+
+//----------------------------------------
+// 1. MAIN SETUP AND IMPORTS
+//----------------------------------------
+indicator('Moving Average Labels', overlay=true, max_labels_count = 500, max_lines_count = 500)
+
+// Import the time library
+import JoePieczynski/MyReusableFunctions/2 as timeLib
+
+// Offset for labels
+offset = input.int(5, title="Label Offset")
+
+// Symbol inputs
+vwapSymbol = syminfo.tickerid
+MASymbol = syminfo.tickerid
+if str.contains(syminfo.ticker, "US500")
+    vwapSymbol := input.symbol("AMEX:SPY", "Vwap Symbol")
+    MASymbol := input.symbol("SP:SPX", "Moving Average Symbol")
+else
+    vwapSymbol := syminfo.tickerid
+    MASymbol := syminfo.tickerid
+
+// Display Settings
+showweeklyem = input.bool(title="Show Weekly EMs", defval=false)
+
+// Bookmap levels
+ES1input = input.int(title="Bookmap ES1", defval=0)
+ES2input = input.int(title="Bookmap ES2", defval=0)
+SPY1input = input.int(title="Bookmap SPY1", defval=0)
+SPY2input = input.int(title="Bookmap SPY2", defval=0)
+
+
+//----------------------------------------
+// 2. TIME CONDITIONS FROM LIBRARY
+//----------------------------------------
+// Get all time conditions from the library
+timeConditions = timeLib.getTimeConditions()
+
+// Cache whether the symbol is US500 - commonly used condition
+var bool isUS500 = false
+isUS500 := str.contains(syminfo.ticker, "US500")
+
+// Use pre-computed time conditions from the library
+isMarketHours = timeConditions.isMarketHours
+isPreMarket = timeConditions.isPreMarket
+isMarketOpen = timeConditions.isMarketOpen
+isMarketClose = timeConditions.isMarketClose
+isLondonOpen = timeConditions.isLondonOpen
+isOvernightHours = timeConditions.isOvernightHours
+
+// Custom time checks not provided in the library's pre-computed conditions
+isPrevDayHighLowTime = timeLib.isInCustomTimeRange(14, 0, 14, 1)
+isCurDayHighLowTime = timeLib.isInCustomTimeRange(15, 0, 15, 1)
+
+//----------------------------------------
+// 3. PRICE CONVERSION FUNCTIONS
+//----------------------------------------
+// Convert prices between different instruments - consolidate security calls
+ESPrice = request.security('ES1!', timeframe.period, close)
+SPYPrice = request.security('AMEX:SPY', timeframe.period, close)
+[SPXDayHigh, SPXDayLow] = request.security('SPX', 'D', [high, low])
+SPXPrice = request.security('SPX', timeframe.period, close)
+
+// Calculate conversion ratios
+ESConvPrice = close/ESPrice
+SPYConvPrice = close/SPYPrice
+SPXconvprice = close/SPXPrice
+
+//----------------------------------------
+// 4. MOVING AVERAGES CALCULATION
+//----------------------------------------
+// Consolidate daily moving averages in a single request
+[sma5, sma5_2, sma20, sma50, sma100, sma200] = request.security(MASymbol, 'D', [ta.sma(close, 5),ta.sma(close[1], 5),ta.sma(close, 20),ta.sma(close, 50),ta.sma(close, 100),ta.sma(close, 200)])
+[bbasis, bupper, blower] = request.security(MASymbol, 'D', ta.bb(close, 20, 2))
+
+// Consolidate weekly moving averages
+[wsma20, wsma50] = request.security(MASymbol, 'W', [ta.sma(close, 20),ta.sma(close, 50)])
+
+// Monthly Moving Average
+msma20 = request.security(MASymbol, 'M', ta.sma(close, 20))
+
+// Current values for plotting (already current since we're using security)
+current_sma5 = sma5
+current_sma20 = sma20
+current_sma50 = sma50
+current_sma100 = sma100
+current_sma200 = sma200
+current_wsma20 = wsma20
+current_wsma50 = wsma50
+current_msma20 = msma20
+upper = bupper
+lower = blower
+
+// SMA5 Color logic
+SMA5Color = sma5 > sma5_2 ? color.green : color.red
+
+//----------------------------------------
+// 5. VWAP CALCULATIONS
+//----------------------------------------
+// US500 VWAPs - these are using the current symbol's data
+US500wvwap = ta.vwap(ohlc4, timeframe.change("1W"))
+US500mvwap = ta.vwap(ohlc4, timeframe.change("1M"))
+US500qvwap = ta.vwap(ohlc4, timeframe.change("3M"))
+US500ytdvwap = ta.vwap(ohlc4, timeframe.change("12M"))
+
+// SPY VWAP
+spydvwap = request.security('AMEX:SPY', timeframe.period, ta.vwap(ohlc4, timeframe.change("1D")))
+
+// Consolidate ES VWAPs in a single request
+[spydvwap2, spywvwap, spymvwap, spyqvwap, spyytdvwap] = request.security(vwapSymbol, timeframe.period,[ta.vwap(ohlc4, timeframe.change("1D")),ta.vwap(ohlc4, timeframe.change("1W")), ta.vwap(ohlc4, timeframe.change("1M")),ta.vwap(ohlc4, timeframe.change("3M")),ta.vwap(ohlc4, timeframe.change("12M"))])
+
+// Convert VWAP values to chart's price scale
+spydvwapconv = spydvwap * SPYConvPrice
+dvwap = (spydvwap2 * SPYConvPrice)
+wvwap = (spywvwap * SPYConvPrice)
+mvwap = (spymvwap * SPYConvPrice)
+qvwap = (spyqvwap * SPYConvPrice)
+ytdvwap = (spyytdvwap * SPYConvPrice)
+
+//----------------------------------------
+// 6. DAY TRACKING VARIABLES
+//----------------------------------------
+// Previous day close (already have SPX data, can reuse elsewhere if needed)
+currentdayclose = request.security('SP:SPX', 'D', close[0])
+
+// Lookback day determination
+int lookbackday = 1
+if request.security(syminfo.tickerid, 'D', barstate.isconfirmed[0])
+    lookbackday := 0
+else
+    lookbackday := 1
+
+// Current day high and low trackers
+var float curdayhigh = 0
+var float curdaylow = 0
+var float prevdayhigh = 0
+var float prevdaylow = 0
+
+// Track current day high/low
+if isCurDayHighLowTime 
+    curdayhigh := high
+    curdaylow := low
+
+if high > curdayhigh
+    curdayhigh := high
+
+if low < curdaylow
+    curdaylow := low
+
+// Save previous day high/low at specific time
+if isPrevDayHighLowTime 
+    prevdayhigh := curdayhigh
+    prevdaylow := curdaylow
+
+// Color logic for current day levels
+color curdayhighcolor = color.yellow
+color curdaylowcolor = color.yellow
+
+if curdayhigh > prevdayhigh
+    curdayhighcolor := color.green
+else
+    curdayhighcolor := color.yellow
+
+if curdaylow < prevdaylow
+    curdaylowcolor := color.red
+else
+    curdaylowcolor := color.yellow
+
+//----------------------------------------
+// 7. CASH MARKET HIGH/LOW TRACKING
+//----------------------------------------
+var float PDChigh_price = 0
+var float PDClow_price = 0
+var float curcashhigh = 0
+var float curcashlow = 0
+
+// Track cash session high/low
+if isUS500 and isMarketHours and high > curcashhigh
+    curcashhigh := high
+if isUS500 and isMarketHours and low < curcashlow
+    curcashlow := low
+
+// Initialize cash high/low at market open
+if isMarketOpen and isUS500 
+    curcashhigh := high
+    curcashlow := low
+
+// Save previous day cash high/low at market close
+if isMarketClose and isUS500 
+    PDChigh_price := curcashhigh
+    PDClow_price := curcashlow
+
+//----------------------------------------
+// 8. WEEKLY LEVELS
+//----------------------------------------
+// Consolidate weekly level requests
+curweekopen = request.security('SP:SPX', 'W', open[0])
+[weekhigh, weeklow] = request.security('CAPITALCOM:US500', 'W', [high[1], low[1]])
+
+//----------------------------------------
+// 9. OPENING LEVELS
+//----------------------------------------
+midnightOpen = request.security(syminfo.tickerid, "1", open[720], lookahead=barmerge.lookahead_on)
+
+// London open and market open tracking
+var londonopeningPrice = 0.0
+var openingprintprice = 0.0
+
+// Get the current day's date
+currentDay = dayofmonth(time)
+
+// Track London open and market open using library time checks
+if isLondonOpen and isUS500
+    londonopeningPrice := open
+if isMarketOpen and isUS500
+    openingprintprice := open
+
+//----------------------------------------
+// 10. OVERNIGHT LEVELS TRACKING
+//----------------------------------------
+var float onhh = na
+var float onll = na
+var bool onlbroken = false
+var bool onhbroken = false
+
+var line overnightHigh = line.new(na, na, na, na, extend=extend.right, style=line.style_dotted, width=4, color=color.teal)
+var line overnightLow = line.new(na, na, na, na, extend=extend.right, style=line.style_dotted, width=4, color=color.orange)
+var label overnightHighlabel = label.new(bar_index, na, "Overnight High", textcolor=color.teal, size=size.large, style=label.style_none)
+var label overnightLowlabel = label.new(bar_index, na, "Overnight Low", textcolor=color.orange, size=size.large, style=label.style_none)
+
+// Update overnight labels position
+label.set_x(overnightHighlabel, bar_index+20)
+label.set_x(overnightLowlabel, bar_index+20)
+
+// Initialize overnight high/low at market close
+if isMarketClose and isUS500
+    onhh := high
+    onll := low
+    line.set_xy1(overnightHigh, bar_index, onhh)
+    line.set_xy2(overnightHigh, bar_index+1, onhh)
+    line.set_xy1(overnightLow, bar_index, onll)
+    line.set_xy2(overnightLow, bar_index+1, onll)
+    label.set_y(overnightHighlabel, onhh)
+    label.set_y(overnightLowlabel, onll)
+    onlbroken := false
+    onhbroken := false
+// Track overnight high/low
+else if isOvernightHours and isUS500
+    if (high > onhh) and isUS500
+        onhh := high
+        line.set_xy1(overnightHigh, bar_index, onhh)
+        line.set_xy2(overnightHigh, bar_index+1, onhh)
+        label.set_y(overnightHighlabel, onhh)
+        onhbroken := false
+    if (low < onll) and isUS500
+        onll := low
+        line.set_xy1(overnightLow, bar_index, onll)
+        line.set_xy2(overnightLow, bar_index+1, onll)
+        label.set_y(overnightLowlabel, onll)
+        onlbroken := false
+
+//----------------------------------------
+// 11. BREAKOUT DETECTION
+//----------------------------------------
+// Overnight level breakout detection
+if isMarketHours and isUS500 and close < onll and not onlbroken and timeframe.in_seconds(timeframe.period) < 3600
+    label.new(bar_index, low, 'ONL', color=color.rgb(240, 197, 112), style=label.style_label_up, textcolor=color.black, size=size.small)
+    onlbroken := true
+if isMarketHours and isUS500 and close > onhh and not onhbroken and timeframe.in_seconds(timeframe.period) < 3600
+    label.new(bar_index, high, 'ONH', color=color.rgb(137, 233, 141), style=label.style_label_down, textcolor=color.black, size=size.small)
+    onhbroken := true
+
+// Previous day cash level breakout detection
+var bool prevdayHbroken = false
+var bool prevdayLbroken = false
+
+if high > PDChigh_price and not prevdayHbroken and timeframe.in_seconds(timeframe.period) <= 3600 and isUS500
+    label.new(bar_index, low, 'PDCH', color=color.rgb(26, 236, 36), style=label.style_label_up, textcolor=color.black, size=size.small)
+    prevdayHbroken := true
+if low < PDClow_price and not prevdayLbroken and timeframe.in_seconds(timeframe.period) <= 3600 and isUS500
+    label.new(bar_index, low, 'PDCL', color=color.rgb(244, 94, 44), style=label.style_label_up, textcolor=color.black, size=size.small)
+    prevdayLbroken := true
+if isMarketClose
+    prevdayHbroken := false
+    prevdayLbroken := false
+
+//----------------------------------------
+// 12. BOOKMAP LEVEL CONVERSIONS
+//----------------------------------------
+int ES1SPX = int(ES1input * ESConvPrice)
+int ES2SPX = int(ES2input * ESConvPrice)
+int SPY1SPX = int(SPY1input * SPYConvPrice)
+int SPY2SPX = int(SPY2input * SPYConvPrice)
+
+//----------------------------------------
+// 13. DRAWING: PERSISTENT LINES & LABELS DECLARATION
+//----------------------------------------
+// Cache the common x-coordinate for label positioning
+var int labelX = 0
+labelX := bar_index + offset
+
+// Create all lines and labels once using var
+// SMA lines and labels
+var line line_id5 = line.new(bar_index, 0, bar_index+offset, 0, color=color.green, width=2)
+var label label_id5 = label.new(bar_index+offset, 0, '5 Dma', textcolor=color.green, style=label.style_none, size=size.small)
+
+var line line_id20 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_id20 = label.new(bar_index+offset, 0, '20 Dma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_id50 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_id50 = label.new(bar_index+offset, 0, '50 Dma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_id100 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_id100 = label.new(bar_index+offset, 0, '100 Dma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_id200 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_id200 = label.new(bar_index+offset, 0, '200 Dma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_idw20 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_idw20 = label.new(bar_index+offset, 0, '20 Wma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_idw50 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_idw50 = label.new(bar_index+offset, 0, '50 Wma', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_idm20 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_idm20 = label.new(bar_index+offset, 0, '20 Mma', textcolor=color.white, style=label.style_none, size=size.small)
+
+// Bollinger Bands
+var line line_bbu = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_bbu = label.new(bar_index+offset, 0, 'Upper BB', textcolor=color.white, style=label.style_none, size=size.small)
+var line line_bbl = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_bbl = label.new(bar_index+offset, 0, 'Lower BB', textcolor=color.white, style=label.style_none, size=size.small)
+
+// VWAP lines and labels
+var line line_spydvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_spydvwap = label.new(bar_index+offset, 0, 'SPY Dvwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_dvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_dvwap = label.new(bar_index+offset, 0, 'D vwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_wvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_wvwap = label.new(bar_index+offset, 0, 'W vwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_mvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_mvwap = label.new(bar_index+offset, 0, 'M vwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_qvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_qvwap = label.new(bar_index+offset, 0, 'Q vwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_ytdvwap = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_ytdvwap = label.new(bar_index+offset, 0, 'YTD vwap', textcolor=color.white, style=label.style_none, size=size.small)
+
+// Day & Week level lines
+var line line_prevdayhigh = line.new(bar_index, 0, bar_index+offset+50, 0, color=color.rgb(22, 255, 57), width=4)
+var label label_prevdayhigh = label.new(bar_index+offset, 0, 'prevday high', textcolor=color.rgb(22, 255, 57), style=label.style_none, size=size.normal)
+var line line_prevdaylow = line.new(bar_index, 0, bar_index+offset+50, 0, color=color.rgb(255, 114, 82), width=4)
+var label label_prevdaylow = label.new(bar_index+offset, 0, 'prevday low', textcolor=color.rgb(255, 114, 82), style=label.style_none, size=size.normal)
+
+var line line_curdayhigh = line.new(bar_index, 0, bar_index+offset, 0, color=color.yellow, width=2)
+var label label_curdayhigh = label.new(bar_index+offset, 0, 'current day high', textcolor=color.yellow, style=label.style_none, size=size.small)
+var line line_curdaylow = line.new(bar_index, 0, bar_index+offset, 0, color=color.yellow, width=2)
+var label label_curdaylow = label.new(bar_index+offset, 0, 'current day low', textcolor=color.yellow, style=label.style_none, size=size.small)
+
+var line line_pvdcdayhigh = line.new(bar_index, 0, bar_index+offset, 0, color=#efa2fc, width=5, extend=extend.left, style=line.style_dashed)
+var label label_pvdcdayhigh = label.new(bar_index+offset, 0, 'PDH Cash', textcolor=#efa2fc, style=label.style_none, size=size.normal)
+var line line_pvdcdaylow = line.new(bar_index, 0, bar_index+offset, 0, color=color.lime, width=5, extend=extend.left, style=line.style_dashed)
+var label label_pvdcdaylow = label.new(bar_index+offset, 0, 'PDL Cash', textcolor=color.lime, style=label.style_none, size=size.normal)
+
+var line line_openingprint = line.new(bar_index, 0, bar_index+offset, 0, color=color.yellow, width=5, extend=extend.left, style=line.style_dashed)
+var label label_openingprint = label.new(bar_index+offset, 0, 'Opening Print', textcolor=color.yellow, style=label.style_none, size=size.normal)
+
+var line londonopenline = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label londonopenlabel = label.new(bar_index+offset, 0, 'London Open', textcolor=color.white, style=label.style_none, size=size.small)
+
+var line line_weekhigh = line.new(bar_index, 0, bar_index+offset, 0, color=color.rgb(223, 255, 82), width=2)
+var label label_weekhigh = label.new(bar_index+offset, 0, 'prev weekly high', textcolor=color.rgb(223, 255, 82), style=label.style_none, size=size.small)
+var line line_weeklow = line.new(bar_index, 0, bar_index+offset, 0, color=color.rgb(223, 255, 82), width=2)
+var label label_weeklow = label.new(bar_index+offset, 0, 'prev weekly low', textcolor=color.rgb(223, 255, 82), style=label.style_none, size=size.small)
+var line line_weekopen = line.new(bar_index, 0, bar_index+offset, 0, color=color.rgb(223, 255, 82), width=2)
+var label label_weekopen = label.new(bar_index+offset, 0, 'cur weekly open', textcolor=color.rgb(223, 255, 82), style=label.style_none, size=size.small)
+
+// Bookmap level lines
+var line line_es1 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_es1 = label.new(bar_index+offset, 0, 'ES1 0', textcolor=color.white, style=label.style_none, size=size.small)
+var line line_es2 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_es2 = label.new(bar_index+offset, 0, 'ES2 0', textcolor=color.white, style=label.style_none, size=size.small)
+var line line_spy1 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_spy1 = label.new(bar_index+offset, 0, 'SPY1 0', textcolor=color.white, style=label.style_none, size=size.small)
+var line line_spy2 = line.new(bar_index, 0, bar_index+offset, 0, color=color.red, width=2)
+var label label_spy2 = label.new(bar_index+offset, 0, 'SPY2 0', textcolor=color.white, style=label.style_none, size=size.small)
+
+//----------------------------------------
+// 14. UPDATING LINES & LABELS
+//----------------------------------------
+// Update SMA lines and labels
+line.set_xy1(line_id5, bar_index, current_sma5)
+line.set_xy2(line_id5, bar_index+offset, current_sma5)
+line.set_color(line_id5, SMA5Color)
+label.set_xy(label_id5, labelX, current_sma5)
+label.set_textcolor(label_id5, SMA5Color)
+
+line.set_xy1(line_id20, bar_index, current_sma20)
+line.set_xy2(line_id20, bar_index+offset, current_sma20)
+label.set_xy(label_id20, labelX, current_sma20)
+
+line.set_xy1(line_id50, bar_index, current_sma50)
+line.set_xy2(line_id50, bar_index+offset, current_sma50)
+label.set_xy(label_id50, labelX, current_sma50)
+
+line.set_xy1(line_id100, bar_index, current_sma100)
+line.set_xy2(line_id100, bar_index+offset, current_sma100)
+label.set_xy(label_id100, labelX, current_sma100)
+
+line.set_xy1(line_id200, bar_index, current_sma200)
+line.set_xy2(line_id200, bar_index+offset, current_sma200)
+label.set_xy(label_id200, labelX, current_sma200)
+
+line.set_xy1(line_idw20, bar_index, current_wsma20)
+line.set_xy2(line_idw20, bar_index+offset, current_wsma20)
+label.set_xy(label_idw20, labelX, current_wsma20)
+
+line.set_xy1(line_idw50, bar_index, current_wsma50)
+line.set_xy2(line_idw50, bar_index+offset, current_wsma50)
+label.set_xy(label_idw50, labelX, current_wsma50)
+
+line.set_xy1(line_idm20, bar_index, current_msma20)
+line.set_xy2(line_idm20, bar_index+offset, current_msma20)
+label.set_xy(label_idm20, labelX, current_msma20)
+
+// Update Bollinger Bands
+line.set_xy1(line_bbu, bar_index, upper)
+line.set_xy2(line_bbu, bar_index+offset, upper)
+label.set_xy(label_bbu, labelX, upper)
+
+line.set_xy1(line_bbl, bar_index, lower)
+line.set_xy2(line_bbl, bar_index+offset, lower)
+label.set_xy(label_bbl, labelX, lower)
+
+// Update VWAP lines
+if isUS500
+    line.set_xy1(line_spydvwap, bar_index, spydvwapconv)
+    line.set_xy2(line_spydvwap, bar_index+offset, spydvwapconv)
+    label.set_xy(label_spydvwap, labelX, spydvwapconv)
+
+line.set_xy1(line_dvwap, bar_index, dvwap)
+line.set_xy2(line_dvwap, bar_index+offset, dvwap)
+label.set_xy(label_dvwap, labelX, dvwap)
+
+line.set_xy1(line_wvwap, bar_index, wvwap)
+line.set_xy2(line_wvwap, bar_index+offset, wvwap)
+label.set_xy(label_wvwap, labelX, wvwap)
+
+line.set_xy1(line_mvwap, bar_index, mvwap)
+line.set_xy2(line_mvwap, bar_index+offset, mvwap)
+label.set_xy(label_mvwap, labelX, mvwap)
+
+line.set_xy1(line_qvwap, bar_index, qvwap)
+line.set_xy2(line_qvwap, bar_index+offset, qvwap)
+label.set_xy(label_qvwap, labelX, qvwap)
+
+line.set_xy1(line_ytdvwap, bar_index, ytdvwap)
+line.set_xy2(line_ytdvwap, bar_index+offset, ytdvwap)
+label.set_xy(label_ytdvwap, labelX, ytdvwap)
+
+// Update day & week level lines
+line.set_xy1(line_prevdayhigh, bar_index, prevdayhigh)
+line.set_xy2(line_prevdayhigh, bar_index+offset+50, prevdayhigh)
+label.set_xy(label_prevdayhigh, labelX, prevdayhigh)
+
+line.set_xy1(line_prevdaylow, bar_index, prevdaylow)
+line.set_xy2(line_prevdaylow, bar_index+offset+50, prevdaylow)
+label.set_xy(label_prevdaylow, labelX, prevdaylow)
+
+line.set_xy1(line_curdayhigh, bar_index, curdayhigh)
+line.set_xy2(line_curdayhigh, bar_index+offset, curdayhigh)
+line.set_color(line_curdayhigh, curdayhighcolor)
+label.set_xy(label_curdayhigh, labelX, curdayhigh)
+label.set_textcolor(label_curdayhigh, curdayhighcolor)
+
+line.set_xy1(line_curdaylow, bar_index, curdaylow)
+line.set_xy2(line_curdaylow, bar_index+offset, curdaylow)
+line.set_color(line_curdaylow, curdaylowcolor)
+label.set_xy(label_curdaylow, labelX, curdaylow)
+label.set_textcolor(label_curdaylow, curdaylowcolor)
+
+line.set_xy1(line_pvdcdayhigh, bar_index, PDChigh_price)
+line.set_xy2(line_pvdcdayhigh, bar_index+offset, PDChigh_price)
+label.set_xy(label_pvdcdayhigh, labelX, PDChigh_price)
+
+line.set_xy1(line_pvdcdaylow, bar_index, PDClow_price)
+line.set_xy2(line_pvdcdaylow, bar_index+offset, PDClow_price)
+label.set_xy(label_pvdcdaylow, labelX, PDClow_price)
+
+line.set_xy1(line_openingprint, bar_index, openingprintprice)
+line.set_xy2(line_openingprint, bar_index+offset, openingprintprice)
+label.set_xy(label_openingprint, labelX, openingprintprice)
+
+line.set_xy1(londonopenline, bar_index, londonopeningPrice)
+line.set_xy2(londonopenline, bar_index+offset, londonopeningPrice)
+label.set_xy(londonopenlabel, labelX, londonopeningPrice)
+
+line.set_xy1(line_weekhigh, bar_index, weekhigh)
+line.set_xy2(line_weekhigh, bar_index+offset, weekhigh)
+label.set_xy(label_weekhigh, labelX, weekhigh)
+
+line.set_xy1(line_weeklow, bar_index, weeklow)
+line.set_xy2(line_weeklow, bar_index+offset, weeklow)
+label.set_xy(label_weeklow, labelX, weeklow)
+
+line.set_xy1(line_weekopen, bar_index, curweekopen)
+line.set_xy2(line_weekopen, bar_index+offset, curweekopen)
+label.set_xy(label_weekopen, labelX, curweekopen)
+
+// Update Bookmap levels
+line.set_xy1(line_es1, bar_index, ES1SPX)
+line.set_xy2(line_es1, bar_index+offset, ES1SPX)
+label.set_xy(label_es1, labelX, ES1SPX)
+label.set_text(label_es1, 'ES1 ' + str.tostring(ES1input))
+
+line.set_xy1(line_es2, bar_index, ES2SPX)
+line.set_xy2(line_es2, bar_index+offset, ES2SPX)
+label.set_xy(label_es2, labelX, ES2SPX)
+label.set_text(label_es2, 'ES2 ' + str.tostring(ES2input))
+
+line.set_xy1(line_spy1, bar_index, SPY1SPX)
+line.set_xy2(line_spy1, bar_index+offset, SPY1SPX)
+label.set_xy(label_spy1, labelX, SPY1SPX)
+label.set_text(label_spy1, 'SPY1 ' + str.tostring(SPY1input))
+
+line.set_xy1(line_spy2, bar_index, SPY2SPX)
+line.set_xy2(line_spy2, bar_index+offset, SPY2SPX)
+label.set_xy(label_spy2, labelX, SPY2SPX)
+label.set_text(label_spy2, 'SPY2 ' + str.tostring(SPY2input))
+
+//----------------------------------------
+// 17. PLOTTING FUNCTIONS
+//----------------------------------------
+// Plot Bookmap levels
+plot(ES1SPX, color=color.white, linewidth=2)
+plot(ES2SPX, color=color.gray, linewidth=2)
+plot(isMarketHours ? SPY1SPX : na, color=color.rgb(251, 255, 35), linewidth=2, style=plot.style_linebr)
+plot(isMarketHours ? SPY2SPX : na, color=color.rgb(255, 247, 0), linewidth=2, style=plot.style_linebr)
+
+// Plot SMA5
+plot(current_sma5, color=SMA5Color, linewidth=4)
+
+// Plot VWAP for market hours (SPY)
+today = time("D")
+isToday = false
+myColor = color.white
+
+if close > spydvwapconv
+    myColor := color.lime
+else
+    myColor := color.red
+
+if year(timenow) == year(time) and month(timenow) == month(time) and dayofmonth(timenow) == dayofmonth(time)
+    isToday := true
+
+plot(isMarketHours and timeframe.in_seconds(timeframe.period) < timeframe.in_seconds('60') and isUS500 ? spydvwapconv : na, color=myColor, linewidth=3, style=plot.style_linebr)
+
+// Fill for price vs prev day high/low
+price = plot(isUS500 and (close > PDChigh_price or close < PDClow_price) ? close : na, title="price", color=color.rgb(255, 255, 255, 100), display=display.none)
+prevdayhigh1 = plot(isUS500 and close > PDChigh_price ? PDChigh_price : na, title="prevdayhigh", color=color.rgb(255, 255, 255, 100), display=display.none)
+prevdaylow1 = plot(isUS500 and close < PDClow_price ? PDClow_price : na, title="prevdaylow", color=color.rgb(255, 255, 255, 100), display=display.none)
+
+fill(price, prevdayhigh1, color=color.rgb(76, 175, 79, 64))
+fill(price, prevdaylow1, color=color.rgb(255, 134, 134, 64))
+
+// ATR calculation
+atr = ta.atr(5)

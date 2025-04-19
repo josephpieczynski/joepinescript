@@ -1,0 +1,140 @@
+// @version=5
+// @description Library of trend direction functions using pivot points
+library("MyReusableFunctions", overlay = true,dynamic_requests = true)
+
+// Function to detect trend direction using current symbol and timeframe
+// @param pivotPeriod The period to use for pivot point detection
+// @returns [direction, directionInt, prevHigh, prevLow] String direction ("up"/"down"), integer direction (1/-1), and previous pivot high/low values
+export CurrentSymbolTrendDirection(int pivotPeriod) =>
+    // Find pivot points
+    pivotLow = ta.pivotlow(low, pivotPeriod, pivotPeriod)
+    pivotHigh = ta.pivothigh(high, pivotPeriod, pivotPeriod)
+    
+    // Initialize variables to track state
+    var string direction = ""
+    var float prevHigh = na
+    var float prevLow = na
+    var int directionInt = 0
+    
+    // Update previous highs and lows when new ones are detected
+    if not na(pivotHigh)
+        prevHigh := pivotHigh
+    if not na(pivotLow)
+        prevLow := pivotLow
+    
+    // Detect trend direction changes
+    if ta.crossover(close, prevHigh) and (direction == "down" or direction == "")
+        direction := "up"
+        directionInt := 1
+    
+    if ta.crossunder(close, prevLow) and (direction == "up" or direction == "")
+        direction := "down"
+        directionInt := -1
+    
+    [direction, directionInt, prevHigh, prevLow]
+
+// Function to detect trend direction using custom symbol and timeframe with 3-period pivots
+// @param symbol The symbol to analyze
+// @param timeframe The timeframe to use
+// @returns [direction, directionInt, prevHigh, prevLow] String direction ("up"/"down"), integer direction (1/-1), and previous pivot high/low values
+export OtherSymbolSmallTrendDirection(string symbol, string timeframe) =>
+    
+    // Request MTF data using the provided symbol and timeframe
+    [highMTF, lowMTF, closeMTF] = request.security(symbol, timeframe, [high, low, close])
+    
+    // Calculate pivot points on the MTF data
+    pivotLow = request.security(symbol, timeframe, ta.pivotlow(low, 3, 3))
+    pivotHigh = request.security(symbol, timeframe, ta.pivothigh(high, 3, 3))
+    
+    // Initialize variables to track state
+    var string direction = ""
+    var float prevHigh = na
+    var float prevLow = na
+    var int directionInt = 0
+    
+    // Update previous highs and lows when new ones are detected
+    if not na(pivotHigh)
+        prevHigh := pivotHigh
+    if not na(pivotLow)
+        prevLow := pivotLow
+    
+    // Detect trend direction changes
+    if ta.crossover(closeMTF, prevHigh) and (direction == "down" or direction == "")
+        direction := "up"
+        directionInt := 1
+    
+    if ta.crossunder(closeMTF, prevLow) and (direction == "up" or direction == "")
+        direction := "down"
+        directionInt := -1
+    
+    [direction, directionInt, prevHigh, prevLow]
+export OtherSymbolLargeTrendDirection(string symbol, string timeframe) =>
+
+    
+    // Request MTF data using the provided symbol and timeframe
+    [highMTF, lowMTF, closeMTF] = request.security(symbol, timeframe, [high, low, close])
+    
+    // Calculate pivot points on the MTF data
+    pivotLow = request.security(symbol, timeframe, ta.pivotlow(low, 10, 10))
+    pivotHigh = request.security(symbol, timeframe, ta.pivothigh(high, 10, 10))
+    
+    // Initialize variables to track state
+    var string direction = ""
+    var float prevHigh = na
+    var float prevLow = na
+    var int directionInt = 0
+    
+    // Update previous highs and lows when new ones are detected
+    if not na(pivotHigh)
+        prevHigh := pivotHigh
+    if not na(pivotLow)
+        prevLow := pivotLow
+    
+    // Detect trend direction changes
+    if ta.crossover(closeMTF, prevHigh) and (direction == "down" or direction == "")
+        direction := "up"
+        directionInt := 1
+    
+    if ta.crossunder(closeMTF, prevLow) and (direction == "up" or direction == "")
+        direction := "down"
+        directionInt := -1
+    
+    [direction, directionInt, prevHigh, prevLow]
+
+/// Function to check if current time is within a custom range using America/Los_Angeles timezone
+// @param startHour Starting hour (0-23)
+// @param startMinute Starting minute (0-59)
+// @param endHour Ending hour (0-23)
+// @param endMinute Ending minute (0-59)
+// @returns boolean True if current time is within the specified range
+export isInCustomTimeRange(int startHour, int startMinute, int endHour, int endMinute) =>
+    // Get Los Angeles timezone-specific hour and minute
+    ph = hour(time, "America/Los_Angeles")
+    pm = minute(time, "America/Los_Angeles")
+    
+    // Check if current time is within range
+    (ph > startHour or (ph == startHour and pm >= startMinute)) and (ph < endHour or (ph == endHour and pm < endMinute))
+
+// Structure to hold pre-computed time conditions
+export type TimeConditions
+    bool isMarketHours
+    bool isPreMarket
+    bool isMarketOpen
+    bool isMarketClose
+    bool isLondonOpen
+    bool isOvernightHours
+
+// Pre-compute time conditions that are commonly used
+// @returns TimeConditions A structure containing all pre-computed time conditions
+export getTimeConditions() =>
+    var TimeConditions conditions = TimeConditions.new(false, false, false, false, false, false)
+    
+    // Update the time condition variables once per bar
+    conditions.isMarketHours := isInCustomTimeRange(6, 30, 13, 0)
+    conditions.isPreMarket := isInCustomTimeRange(0, 0, 6, 30)
+    conditions.isMarketOpen := isInCustomTimeRange(6, 30, 6, 31)
+    conditions.isMarketClose := isInCustomTimeRange(13, 0, 13, 1)
+    conditions.isLondonOpen := isInCustomTimeRange(0, 0, 0, 1)
+    conditions.isOvernightHours := not conditions.isMarketHours
+    
+    conditions

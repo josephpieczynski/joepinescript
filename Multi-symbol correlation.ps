@@ -1,0 +1,318 @@
+//@version=5
+indicator("Multi-Symbol Correlation & ROC Signal – Dual TF", overlay=false)
+
+// Global Settings
+globalGroup = "Global Settings"
+lowerTF = input.timeframe("", "Lower Timeframe", group=globalGroup, tooltip="Leave blank to use current chart timeframe")
+higherTF = input.timeframe("10", "Higher Timeframe", group=globalGroup, tooltip="Default higher timeframe if not auto-calculated")
+showDetailedPlots = input.bool(true, "Show All Signal Plots", group=globalGroup, tooltip="Turn off to improve performance")
+showDebugInfo = input.bool(false, "Show Debug Information", group=globalGroup, tooltip="Display timeframe debug labels")
+ph = hour(time, "America/Los_Angeles")
+pm = minute(time, "America/Los_Angeles")
+
+// Determine effective timeframes
+var string effectiveLowerTF = ""
+var string effectiveHigherTF = ""
+
+// Update the effective timeframes on each bar
+effectiveLowerTF := lowerTF == "" ? timeframe.period : lowerTF
+
+// Direct mapping logic for higher timeframe
+if effectiveLowerTF == "5"
+    effectiveHigherTF := "10"
+else if effectiveLowerTF == "10"
+    effectiveHigherTF := "30"
+else if effectiveLowerTF == "30" 
+    effectiveHigherTF := "60"
+else if effectiveLowerTF == "60" or effectiveLowerTF == "1H"
+    effectiveHigherTF := "240"
+else if effectiveLowerTF == "120" or effectiveLowerTF == "2H"
+    effectiveHigherTF := "D"
+else if effectiveLowerTF == "240" or effectiveLowerTF == "4H"
+    effectiveHigherTF := "W"
+else
+    effectiveHigherTF := higherTF
+
+// Debug labels for timeframes - only visible when showDebugInfo is true
+if barstate.islast and showDebugInfo
+    // Declare label variables
+    var label chartTF_lbl = na
+    var label lowerTF_lbl = na
+    var label effectiveLower_lbl = na
+    var label higherTF_lbl = na
+    var label effectiveHigher_lbl = na
+    
+    // Delete previous labels
+    if not na(chartTF_lbl)
+        label.delete(chartTF_lbl)
+    if not na(lowerTF_lbl)
+        label.delete(lowerTF_lbl)
+    if not na(effectiveLower_lbl)
+        label.delete(effectiveLower_lbl)
+    if not na(higherTF_lbl)
+        label.delete(higherTF_lbl)
+    if not na(effectiveHigher_lbl)
+        label.delete(effectiveHigher_lbl)
+    
+    // Create new debug labels
+    chartTF_lbl := label.new(bar_index, 0, "Chart TF: " + timeframe.period, color=color.blue, style=label.style_label_down, textcolor=color.white, size=size.small)
+    lowerTF_lbl := label.new(bar_index, 1, "Input LowerTF: " + lowerTF, color=color.green, style=label.style_label_down, textcolor=color.white, size=size.small)
+    effectiveLower_lbl := label.new(bar_index, 2, "Effective LowerTF: " + effectiveLowerTF, color=color.orange, style=label.style_label_down, textcolor=color.white, size=size.small)
+    higherTF_lbl := label.new(bar_index, 3, "Input HigherTF: " + higherTF, color=color.purple, style=label.style_label_down, textcolor=color.white, size=size.small)
+    effectiveHigher_lbl := label.new(bar_index, 4, "Effective HigherTF: " + effectiveHigherTF, color=color.red, style=label.style_label_down, textcolor=color.white, size=size.small)
+
+// Optimized custom time range function using the cached values
+isInCustomTimeRange(startHour, startMinute, endHour, endMinute) => (ph > startHour or (ph == startHour and pm >= startMinute)) and (ph < endHour or (ph == endHour and pm < endMinute))
+
+// OPTIMIZATION: Calculate time range check once per bar (not using 'var' which would only calculate once)
+bool inTimeRange = isInCustomTimeRange(6, 30, 13, 0)
+
+// Symbol 1 Settings
+group_sym1 = "Symbol 1"
+sym1          = input.symbol("NYMEX:CL1!", "Symbol", group=group_sym1, inline="s1")
+offset1       = input.int(1, "Offset", group=group_sym1, inline="s1")
+color1        = input.color(color.red, "Color", group=group_sym1, inline="s1")
+corrLookBack1 = input.int(15, "Correlation Lookback", minval=1, group=group_sym1, inline="s1")
+rocLookBack1  = input.int(20, "ROC Lookback", minval=1, group=group_sym1, inline="s1")
+cashOnly1     = input.bool(false, "Cash Only Symbol", group=group_sym1, inline="s1")
+
+// Symbol 2 Settings
+group_sym2 = "Symbol 2"
+sym2          = input.symbol("AMEX:HYG/BATS:IEI", "Symbol", group=group_sym2, inline="s2")
+offset2       = input.int(6, "Offset", group=group_sym2, inline="s2")
+color2        = input.color(color.purple, "Color", group=group_sym2, inline="s2")
+corrLookBack2 = input.int(10, "Correlation Lookback", minval=1, group=group_sym2, inline="s2")
+rocLookBack2  = input.int(10, "ROC Lookback", minval=1, group=group_sym2, inline="s2")
+cashOnly2     = input.bool(true, "Cash Only Symbol", group=group_sym2, inline="s2")
+
+// Symbol 3 Settings
+group_sym3 = "Symbol 3"
+sym3          = input.symbol("FX:USDJPY", "Symbol", group=group_sym3, inline="s3")
+offset3       = input.int(3, "Offset", group=group_sym3, inline="s3")
+color3        = input.color(color.yellow, "Color", group=group_sym3, inline="s3")
+corrLookBack3 = input.int(20, "Correlation Lookback", minval=1, group=group_sym3, inline="s3")
+rocLookBack3  = input.int(10, "ROC Lookback", minval=1, group=group_sym3, inline="s3")
+cashOnly3     = input.bool(false, "Cash Only Symbol", group=group_sym3, inline="s3")
+
+// Symbol 4 Settings
+group_sym4 = "Symbol 4"
+sym4          = input.symbol("AMEX:HYG", "Symbol", group=group_sym4, inline="s4")
+offset4       = input.int(5, "Offset", group=group_sym4, inline="s4")
+color4        = input.color(#21ecf3, "Color", group=group_sym4, inline="s4")
+corrLookBack4 = input.int(10, "Correlation Lookback", minval=1, group=group_sym4, inline="s4")
+rocLookBack4  = input.int(10, "ROC Lookback", minval=1, group=group_sym4, inline="s4")
+cashOnly4     = input.bool(true, "Cash Only Symbol", group=group_sym4, inline="s4")
+
+// Symbol 5 Settings
+group_sym5 = "Symbol 5"
+sym5          = input.symbol("40/CBOE:VIX1D+USI:PCSPX", "Symbol", group=group_sym5, inline="s5")
+offset5       = input.int(7, "Offset", group=group_sym5, inline="s5")
+color5        = input.color(color.white, "Color", group=group_sym5, inline="s5")
+corrLookBack5 = input.int(20, "Correlation Lookback", minval=1, group=group_sym5, inline="s5")
+rocLookBack5  = input.int(10, "ROC Lookback", minval=1, group=group_sym5, inline="s5")
+cashOnly5     = input.bool(true, "Cash Only Symbol", group=group_sym5, inline="s5")
+
+// Symbol 6 Settings
+group_sym6 = "Symbol 6"
+sym6          = input.symbol("1/CBOT:ZB1!", "Symbol", group=group_sym6, inline="s6")
+offset6       = input.int(4, "Offset", group=group_sym6, inline="s6")
+color6        = input.color(color.blue, "Color", group=group_sym6, inline="s6")
+corrLookBack6 = input.int(20, "Correlation Lookback", minval=1, group=group_sym6, inline="s6")
+rocLookBack6  = input.int(10, "ROC Lookback", minval=1, group=group_sym6, inline="s6")
+cashOnly6     = input.bool(false, "Cash Only Symbol", group=group_sym6, inline="s6")
+
+// Symbol 7 Settings
+group_sym7 = "Symbol 7"
+sym7          = input.symbol("OANDA:AUDCHF", "Symbol", group=group_sym7, inline="s7")
+offset7       = input.int(2, "Offset", group=group_sym7, inline="s7")
+color7        = input.color(color.orange, "Color", group=group_sym7, inline="s7")
+corrLookBack7 = input.int(20, "Correlation Lookback", minval=1, group=group_sym7, inline="s7")
+rocLookBack7  = input.int(20, "ROC Lookback", minval=1, group=group_sym7, inline="s7")
+cashOnly7     = input.bool(false, "Cash Only Symbol", group=group_sym7, inline="s7")
+
+// Symbol 8 Settings
+group_sym8 = "Symbol 8"
+sym8          = input.symbol("CRYPTOCAP:TOTAL", "Symbol", group=group_sym8, inline="s8")
+offset8       = input.int(8, "Offset", group=group_sym8, inline="s8")
+color8        = input.color(color.lime, "Color", group=group_sym8, inline="s8")
+corrLookBack8 = input.int(20, "Correlation Lookback", minval=1, group=group_sym8, inline="s8")
+rocLookBack8  = input.int(20, "ROC Lookback", minval=1, group=group_sym8, inline="s8")
+cashOnly8     = input.bool(false, "Cash Only Symbol", group=group_sym8, inline="s8")
+
+
+// Base Close Calculation - IMPORTANT: using effectiveHigherTF
+baseClose = request.security(syminfo.tickerid, effectiveHigherTF, ohlc4)
+
+// Enhanced function to get signals and ROC differences
+f_getSignalAndROCDiff(sym, offs, tf, correlationLookBack, rocLookBack) =>
+    [symClose, corr_val, roc_val] = request.security(sym, tf, [ohlc4, ta.correlation(ohlc4, baseClose, correlationLookBack), ta.roc(ohlc4, rocLookBack)], lookahead = barmerge.lookahead_on)
+    var float signal = na
+    roc = ta.roc(ohlc4,rocLookBack)
+    roc_diff = roc_val - roc
+    
+    if (corr_val < -0.2)
+        signal := roc_diff > 0 and (roc_val[1]-roc[1] > 0 or na(signal[1])) ? float(offs) :
+                  roc_diff < 0 and (roc_val[1]-roc[1] < 0 or na(signal[1])) ? float(-offs) : na
+    else
+        signal := na
+    [signal, roc_diff]
+
+// Helper to conditionally trigger signal based on Cash Only checkbox and custom time range
+// OPTIMIZATION: Use cached inTimeRange variable instead of calling the function repeatedly
+f_conditionalSignalAndROCDiff(cashOnly, sym, offs, tf, corrLB, rocLB) =>
+    // If the cash only checkbox is true and we're NOT in the specified time range, do not trigger signal
+    if (cashOnly and not inTimeRange)
+        [na, na]
+    else
+        f_getSignalAndROCDiff(sym, offs, tf, corrLB, rocLB)
+
+// Get signals and ROC differences for each symbol (Chart TF) - Using effectiveLowerTF
+[signal1_chart, roc_diff1_chart] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveLowerTF, corrLookBack1, rocLookBack1)
+[signal2_chart, roc_diff2_chart] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveLowerTF, corrLookBack2, rocLookBack2)
+[signal3_chart, roc_diff3_chart] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveLowerTF, corrLookBack3, rocLookBack3)
+[signal4_chart, roc_diff4_chart] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveLowerTF, corrLookBack4, rocLookBack4)
+[signal5_chart, roc_diff5_chart] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveLowerTF, corrLookBack5, rocLookBack5)
+[signal6_chart, roc_diff6_chart] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveLowerTF, corrLookBack6, rocLookBack6)
+[signal7_chart, roc_diff7_chart] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveLowerTF, corrLookBack7, rocLookBack7)
+[signal8_chart, roc_diff8_chart] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveLowerTF, corrLookBack8, rocLookBack8)
+
+// Get signals and ROC differences for each symbol (Higher TF) - Using effectiveHigherTF
+[signal1_higher, roc_diff1_higher] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveHigherTF, corrLookBack1, rocLookBack1)
+[signal2_higher, roc_diff2_higher] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveHigherTF, corrLookBack2, rocLookBack2)
+[signal3_higher, roc_diff3_higher] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveHigherTF, corrLookBack3, rocLookBack3)
+[signal4_higher, roc_diff4_higher] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveHigherTF, corrLookBack4, rocLookBack4)
+[signal5_higher, roc_diff5_higher] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveHigherTF, corrLookBack5, rocLookBack5)
+[signal6_higher, roc_diff6_higher] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveHigherTF, corrLookBack6, rocLookBack6)
+[signal7_higher, roc_diff7_higher] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveHigherTF, corrLookBack7, rocLookBack7)
+[signal8_higher, roc_diff8_higher] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveHigherTF, corrLookBack8, rocLookBack8)
+
+// Compute histogram sum in one line
+histogram_value = (not na(signal1_chart) ? (signal1_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal2_chart) ? (signal2_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal3_chart) ? (signal3_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal4_chart) ? (signal4_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal5_chart) ? (signal5_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal6_chart) ? (signal6_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal7_chart) ? (signal7_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal8_chart) ? (signal8_chart > 0 ? 1 : -1) : 0) +
+                  (not na(signal1_higher) ? (signal1_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal2_higher) ? (signal2_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal3_higher) ? (signal3_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal4_higher) ? (signal4_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal5_higher) ? (signal5_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal6_higher) ? (signal6_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal7_higher) ? (signal7_higher > 0 ? 1.5 : -1.5) : 0) +
+                  (not na(signal8_higher) ? (signal8_higher > 0 ? 1.5 : -1.5) : 0)
+
+// Define histogram color logic
+histogram_color = histogram_value >= 5 ? #00e6777e : histogram_value <= -5 ? #ff525280 : #2195f365
+
+// NEW CODE: Create integer variables for each signal state that oscillate between 1 and -1
+// Initialize variables with default values
+var int signal1_chart_state = 1
+var int signal2_chart_state = 1
+var int signal3_chart_state = 1
+var int signal4_chart_state = 1
+var int signal5_chart_state = 1
+var int signal6_chart_state = 1
+var int signal7_chart_state = 1
+var int signal8_chart_state = 1
+
+var int signal1_higher_state = 1
+var int signal2_higher_state = 1
+var int signal3_higher_state = 1
+var int signal4_higher_state = 1
+var int signal5_higher_state = 1
+var int signal6_higher_state = 1
+var int signal7_higher_state = 1
+var int signal8_higher_state = 1
+
+// Update values only when signals are not NA
+if not na(signal1_chart)
+    signal1_chart_state := signal1_chart > 0 ? 1 : -1
+if not na(signal2_chart)
+    signal2_chart_state := signal2_chart > 0 ? 1 : -1
+if not na(signal3_chart)
+    signal3_chart_state := signal3_chart > 0 ? 1 : -1
+if not na(signal4_chart)
+    signal4_chart_state := signal4_chart > 0 ? 1 : -1
+if not na(signal5_chart)
+    signal5_chart_state := signal5_chart > 0 ? 1 : -1
+if not na(signal6_chart)
+    signal6_chart_state := signal6_chart > 0 ? 1 : -1
+if not na(signal7_chart)
+    signal7_chart_state := signal7_chart > 0 ? 1 : -1
+if not na(signal8_chart)
+    signal8_chart_state := signal8_chart > 0 ? 1 : -1
+
+if not na(signal1_higher)
+    signal1_higher_state := signal1_higher > 0 ? 1 : -1
+if not na(signal2_higher)
+    signal2_higher_state := signal2_higher > 0 ? 1 : -1
+if not na(signal3_higher)
+    signal3_higher_state := signal3_higher > 0 ? 1 : -1
+if not na(signal4_higher)
+    signal4_higher_state := signal4_higher > 0 ? 1 : -1
+if not na(signal5_higher)
+    signal5_higher_state := signal5_higher > 0 ? 1 : -1
+if not na(signal6_higher)
+    signal6_higher_state := signal6_higher > 0 ? 1 : -1
+if not na(signal7_higher)
+    signal7_higher_state := signal7_higher > 0 ? 1 : -1
+if not na(signal8_higher)
+    signal8_higher_state := signal8_higher > 0 ? 1 : -1
+
+// Calculate weighted sum using the same weighting as histogram_value
+float weighted_sum = signal1_chart_state * 1.0 + signal2_chart_state * 1.0 + signal3_chart_state * 1.0 + signal4_chart_state * 1.0 +signal5_chart_state * 1.0 + signal6_chart_state * 1.0 + signal7_chart_state * 1.0 + signal8_chart_state * 1.0 +signal1_higher_state * 1.5 + signal2_higher_state * 1.5 + signal3_higher_state * 1.5 + signal4_higher_state * 1.5 +signal5_higher_state * 1.5 + signal6_higher_state * 1.5 + signal7_higher_state * 1.5 + signal8_higher_state * 1.5
+
+// Scale from [-20, 20] to [-8, 8]
+float normalized_signal = weighted_sum * 0.4
+
+// Plot histogram with color logic (always show)
+plot(histogram_value, title="Divergence Histogram", color=histogram_color, style=plot.style_histogram, linewidth=2)
+
+// Plot normalized signal line (always show)
+plot(normalized_signal, title="Normalized Signal Line", color=color.yellow, linewidth=2, style=plot.style_line)
+
+// Plot Higher TF signals (conditionally shown based on toggle)
+plot(signal1_higher, title="Signal 1 (Higher TF)", color=color1, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal2_higher, title="Signal 2 (Higher TF)", color=color2, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal3_higher, title="Signal 3 (Higher TF)", color=color3, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal4_higher, title="Signal 4 (Higher TF)", color=color4, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal5_higher, title="Signal 5 (Higher TF)", color=color5, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal6_higher, title="Signal 6 (Higher TF)", color=color6, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal7_higher, title="Signal 7 (Higher TF)", color=color7, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+plot(signal8_higher, title="Signal 8 (Higher TF)", color=color8, style=plot.style_linebr, linewidth=5, display=showDetailedPlots ? display.all : display.none)
+
+// Plot Chart TF signals (conditionally shown based on toggle)
+plot(signal1_chart, title="Signal 1 (Chart TF)", color=color1, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal2_chart, title="Signal 2 (Chart TF)", color=color2, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal3_chart, title="Signal 3 (Chart TF)", color=color3, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal4_chart, title="Signal 4 (Chart TF)", color=color4, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal5_chart, title="Signal 5 (Chart TF)", color=color5, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal6_chart, title="Signal 6 (Chart TF)", color=color6, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal7_chart, title="Signal 7 (Chart TF)", color=color7, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+plot(signal8_chart, title="Signal 8 (Chart TF)", color=color8, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
+
+// Alert conditions
+histogram_below_threshold = histogram_value <= -5 and histogram_value[1] > -5 and histogram_value[2] > -5 and histogram_value[3] > -5 and histogram_value[4] > -5
+histogram_above_threshold = histogram_value >= 5 and histogram_value[1] < 5 and histogram_value[2] < 5 and histogram_value[3] < 5 and histogram_value[4] < 5
+alertcondition(histogram_above_threshold or histogram_below_threshold, "All Multi Symbol Divergence", "All Multi Symbol Divergence")
+alertcondition(histogram_below_threshold, "Multi Symbol Negative Divergence", "Multi Symbol Negative Divergence")
+alertcondition(histogram_above_threshold, "Multi Symbol Positive Divergence", "Multi Symbol Positive Divergence")
+
+// Calculate correlation for Symbol 2 - Using effectiveLowerTF
+[symClose2, corr_val2] = request.security(sym2, effectiveLowerTF, [ohlc4, ta.correlation(ohlc4, baseClose, corrLookBack2)], lookahead = barmerge.lookahead_on)
+
+// Apply cash only condition if needed
+// OPTIMIZATION: Use cached inTimeRange variable instead of calling the function
+final_corr = cashOnly2 and not inTimeRange ? na : corr_val2
+
+// Scale correlation to -8 to 8 range
+scaled_corr = final_corr * 8
+
+// Only show when correlation is under 2
+display_corr = scaled_corr < 2 ? scaled_corr : na
+
+// Plot the correlation (conditionally shown based on toggle)
+plot(display_corr, title="Symbol 2 Correlation", color=color.purple, linewidth=2, style=plot.style_linebr, display=showDetailedPlots ? display.all : display.none)

@@ -1,0 +1,342 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © JoePieczynski
+
+//@version=5
+indicator("Correlation v3", overlay=true, max_labels_count=500)
+
+// Import time library
+import JoePieczynski/MyReusableFunctions/2 as timeLib
+
+// Get time conditions from library
+timeConditions = timeLib.getTimeConditions()
+
+// Initialize variables
+var t4bull = 0
+var t4bear = 0
+var cashbull = 0
+var cashbear = 0
+var abprice = ""
+
+// Price source for correlation analysis. Using a higher price value (e.g. high) may smooth out noise,
+// while a lower price value (e.g. low) increases sensitivity to minor movements.
+confluencecor = input(close, title="Confluence Correlation Direction", tooltip="Select the price series used for correlation analysis. Using a price series with higher values (e.g. high) may smooth out noise, while one with lower values (e.g. low) may increase sensitivity to small movements.")
+confluencecor2 = input(close, title="2nd Confluence Correlation Direction", tooltip="Select the price series used for correlation analysis. Using a price series with higher values (e.g. high) may smooth out noise, while one with lower values (e.g. low) may increase sensitivity to small movements.")
+
+// Input settings
+
+// Main Formula: Primary asset used in the correlation analysis.
+currency1 = input.symbol('HYG', 'Main Formula', confirm=true, tooltip="Enter the ticker for the main asset. This asset drives the primary correlation analysis.")
+
+// Secondary Formula: Composite of symbols used in the secondary calculation.
+currency2 = input.symbol('CADUSD+AUDUSD+AUDCHF+MXNUSD+MXNCHF*12', 'Secondary Formula', confirm=true, tooltip="Enter one or more symbols (you can combine them) for the secondary formula. This is used for an alternative correlation measure.")
+
+// Toggle between main and secondary formulas.
+selectcurrency2 = input.bool(false, "Select Secondary Formula", tooltip="Toggle to use the secondary formula instead of the main formula for your analysis.")
+
+// Reset the conversion snapshot at the start of the New York cash session.
+cashreset = input.bool(false, "Reset on Start NY Cash", tooltip="If enabled, resets the currency conversion snapshot at the start of the New York cash session.")
+
+// Reset the snapshot at the London cash session (averages previous and current values).
+londonreset = input.bool(true, "Reset on London Cash", tooltip="If enabled, resets (or averages) the conversion snapshot at the start of the London cash session.")
+
+// Reset the snapshot at the end of the New York cash session.
+endNYreset = input.bool(true, "Reset on End NY Cash", tooltip="If enabled, resets the conversion snapshot at the end of the New York cash session.")
+
+// Display entry labels on chart when conditions are met.
+entrylabels = input.bool(true, "Entry Labels", tooltip="Toggle to show buy/sell entry labels on the chart when conditions are met.")
+
+// Combine the main and secondary formulas into one composite indicator.
+combinecur = input.bool(false, "Combine Formulas", tooltip="Toggle to combine the main and secondary formulas for a composite correlation measure.")
+
+// Currency BG Correlation Threshold:
+// Lower values increase sensitivity to minor changes; higher values filter out small fluctuations.
+curcorBGthreshold = input.float(0.15, "Currency BG Correlation Threshold", tooltip="Set the threshold for background correlation. Lower values increase sensitivity to minor changes; higher values filter out small fluctuations.")
+
+// Direct Currency ROC Threshold:
+// Lower values increase sensitivity; higher values require more significant movement.
+dirrocthreshold = input.float(0.8, "Direct Currency ROC Threshold", tooltip="Set the threshold for the direct Rate Of Change. Lower values increase sensitivity; higher values require more significant movement.")
+
+// Correlation Currency ROC Threshold:
+// Lower values increase sensitivity to minor changes; higher values smooth out the noise.
+corrocthreshold = input.float(0.1, "Correlation Currency ROC Threshold", tooltip="Set the threshold for the correlation-based ROC signal. Lower values increase sensitivity to minor changes; higher values smooth out the noise.")
+
+// Main Rate Of Change Length:
+// Lower lengths yield a more sensitive indicator; higher lengths provide a smoother response.
+ROC = input.int(defval = 10, title = "Main Rate Of Change Length", tooltip="Set the period length for the main ROC calculation. Lower values yield a more sensitive indicator; higher values provide a smoother response.")
+
+// Main Correlation Length:
+// Lower lengths increase sensitivity to recent changes; higher lengths smooth the signal.
+CorLen = input.int(defval = 10, title = "Main Correlation Length", tooltip="Set the period length for the correlation calculation. Lower values increase sensitivity to recent changes; higher values smooth the signal.")
+
+// Determine which currency to use based on selection
+currency = "AAPL"
+if selectcurrency2
+    currency := currency2
+if not selectcurrency2
+    currency := currency1
+if combinecur
+    currency := currency1 + '+' + currency2
+
+// Calculate current price and conversion price
+curprice = request.security(currency, timeframe.period, ohlc4)
+cur2price = request.security(currency2, timeframe.period, ohlc4)
+SPYConvPrice = ohlc4 / curprice
+curconvprice = curprice * SPYConvPrice
+
+// Initialize snapshot and adjusted currency variables
+var float curconvpricesnapshot = 0.00000
+var float adjcurrency = 0.00000
+
+// Reset snapshot and counters at specific times
+if timeConditions.isMarketClose and endNYreset
+    curconvpricesnapshot := SPYConvPrice
+    cashbull := 0
+    cashbear := 0
+
+if timeLib.isInCustomTimeRange(6, 29, 6, 31) and cashreset
+    curconvpricesnapshot := SPYConvPrice
+
+if timeConditions.isLondonOpen and londonreset
+    curconvpricesnapshot := (SPYConvPrice + curconvpricesnapshot) / 2
+if timeConditions.isLondonOpen
+    t4bull := 0
+    t4bear := 0
+
+// Calculate price change and update snapshot
+var float curpricechange = 0.00000
+curpricechange := (SPYConvPrice * curprice) - (SPYConvPrice * curprice[1])
+curconvpricesnapshot := curconvpricesnapshot + curpricechange
+
+// Plot currency conversion price
+currencyplot = plot(curprice * curconvpricesnapshot, title="Currency Plot", color=color.yellow)
+
+// Determine fill color based on price comparison
+var color fillColor = #ffffff00
+if curprice * curconvpricesnapshot > ohlc4
+    fillColor := #00c8ff33
+    t4bull := t4bull + 1
+if curprice * curconvpricesnapshot < ohlc4
+    fillColor := #f700ff32
+    t4bear := t4bear + 1
+
+// Update cash bull and bear counters during NY cash hours
+if curprice * curconvpricesnapshot > ohlc4 and timeConditions.isMarketHours
+    cashbull := cashbull + 1
+if curprice * curconvpricesnapshot < ohlc4 and timeConditions.isMarketHours
+    cashbear := cashbear + 1
+if curprice * curconvpricesnapshot > ohlc4
+    abprice := "⬆️"
+if curprice * curconvpricesnapshot < ohlc4 
+    abprice := "⬇️"
+
+// Plot price and fill area between plots
+price = plot(ohlc4, title="Price", color=#ffffff00)
+fill(price, currencyplot, color=fillColor, title='fill bg')
+
+// Calculate totals and percentages
+total = t4bull + t4bear
+cashtotal = cashbull + cashbear
+t4bullpercentage1 = (t4bull / total) * 100
+t4bearpercentage2 = (t4bear / total) * 100
+cashbullpercentage1 = (cashbull / cashtotal) * 100
+cashbearpercentage2 = (cashbear / cashtotal) * 100
+
+// Create and update table with percentages
+var table myTable = table.new(position.top_right, 3, 3, border_width=1)
+table.cell(myTable, 0, 0, "Bull FX (%)", bgcolor=#4caf4f80, text_color=color.white)
+table.cell(myTable, 0, 1, str.tostring(t4bullpercentage1, format.percent), bgcolor=#4caf4f80, text_color=color.white)
+table.cell(myTable, 0, 2, str.tostring(cashbullpercentage1, format.percent), bgcolor=#4caf4f80, text_color=color.white)
+table.cell(myTable, 1, 0, "Bear FX (%)", bgcolor=#ff525280, text_color=color.white)
+table.cell(myTable, 1, 1, str.tostring(t4bearpercentage2, format.percent), bgcolor=#ff525280, text_color=color.white)
+table.cell(myTable, 1, 2, str.tostring(cashbearpercentage2, format.percent), bgcolor=#ff525280, text_color=color.white)
+table.cell(myTable, 2, 0, abprice, bgcolor=#2195f37f)
+table.cell(myTable, 2, 1, "24H", bgcolor=#2195f37f, text_color=color.white)
+table.cell(myTable, 2, 2, "NY Cash", bgcolor=#2195f37f, text_color=color.white)
+
+if timeLib.isInCustomTimeRange(6, 00, 6, 01) and t4bullpercentage1 > 75
+    trendlabel = label.new(bar_index, low - 4, 'Cor Trend Day Up\nORB/ONH HL Confirmation', color=color.rgb(4, 17, 255), style=label.style_label_upper_right, textcolor=color.rgb(255, 255, 255), size=size.large)
+    label.new(bar_index, low - 4, 'Trend ⬆️', color=color.rgb(4, 17, 255), style=label.style_label_upper_right, textcolor=color.rgb(255, 255, 255), size=size.small)
+    label.delete(trendlabel[1])
+
+if timeLib.isInCustomTimeRange(6, 00, 6, 01) and t4bullpercentage1 < 25
+    trendlabel = label.new(bar_index, low - 4, 'Cor Trend Day Down\nORB/ONL LH Confirmation', color=color.rgb(255, 2, 2), style=label.style_label_upper_right, textcolor=color.rgb(255, 255, 255), size=size.large)
+    label.new(bar_index, low - 4, 'Trend ⬇️', color=#0411ff, style=label.style_label_upper_right, textcolor=color.rgb(255, 255, 255), size=size.small)
+    label.delete(trendlabel[1])
+
+alertcondition(timeLib.isInCustomTimeRange(6, 00, 6, 01) and t4bullpercentage1 > 75, "Correlation Trend Day Up", "Correlation Trend Day Up")
+alertcondition(timeLib.isInCustomTimeRange(6, 00, 6, 01) and t4bullpercentage1 < 25, "Correlation Trend Day Down", "Correlation Trend Day Down")
+
+var color backgroundcolor = na
+var color backgroundcolor2 = na
+roc = ta.roc(ohlc4, ROC)
+cur = ta.roc(curprice, ROC)
+cur2roc = ta.roc(cur2price, CorLen)
+curcorreclation = ta.correlation(curprice, ohlc4, CorLen)
+bondcorrelation = ta.correlation(cur2price, ohlc4, CorLen)
+var int direction = 0
+var int divergence = 0
+
+// Currency Direction
+cursmtfpivlo = request.security(currency, timeframe.period, ta.pivotlow(low, 3, 3))
+cursmtfpivhi = request.security(currency, timeframe.period, ta.pivothigh(high, 3, 3))
+var curdirection = ""
+var float cursmtfprevhi = na
+var float cursmtfprevlo = na
+if not na(cursmtfpivhi)
+    cursmtfprevhi := cursmtfpivhi
+if not na(cursmtfpivlo)
+    cursmtfprevlo := cursmtfpivlo
+if ta.crossover(curprice, cursmtfprevhi)
+    curdirection := "up"
+if ta.crossunder(curprice, cursmtfpivlo)
+    curdirection := "down"
+
+// Direction Logic
+mtfpivlo = ta.pivotlow(low, 3, 3)
+smtfpivhi = ta.pivothigh(high, 3, 3)
+var string pricedirection = ""
+var float smtfprevhi = na
+var float smtfprevlo = na
+
+if not na(smtfpivhi)
+    smtfprevhi := smtfpivhi
+if not na(mtfpivlo)
+    smtfprevlo := mtfpivlo
+
+if ta.crossover(close[1], smtfprevhi) and close > smtfprevhi and (pricedirection == "down" or pricedirection == "")
+    pricedirection := "up"
+if ta.crossunder(close[1], smtfprevlo) and close < smtfprevlo and (pricedirection == "up" or pricedirection == "")
+    pricedirection := "down"
+
+var bool strongbull = false
+var bool strongbear = false
+var bool strongbullconfirmed = false
+var bool strongbearconfirmed = false
+var label strongbull_label = label.new(na, na, "confirm", color=color.green, style=label.style_label_down, textcolor=color.white, size=size.small)
+var label strongbear_label = label.new(na, na, "confirm", color=color.red, style=label.style_label_up, textcolor=color.white, size=size.small)
+plot(cur, color=color.purple)
+
+if ((cur - roc) * 4) > corrocthreshold and curcorreclation < curcorBGthreshold and ((cur - roc) * 4) > dirrocthreshold and cur > 0 and curprice * curconvpricesnapshot > ohlc4
+//    backgroundcolor := color.rgb(248, 255, 60, 80)
+    direction := 1
+    divergence := 1
+    strongbull := true
+    strongbear := false
+    strongbullconfirmed := false
+if ((cur - roc) * 4) < corrocthreshold and curcorreclation < curcorBGthreshold and ((cur - roc) * 4) < -dirrocthreshold and cur < 0 and curprice * curconvpricesnapshot < ohlc4
+//    backgroundcolor := color.rgb(49, 153, 226, 80)
+    direction := -1
+    divergence := -1
+    strongbull := false
+    strongbear := true
+    strongbearconfirmed := false
+if (cur2roc- ta.roc(ohlc4,10) < 0 and bondcorrelation < 0) and timeConditions.isMarketHours
+    backgroundcolor := #e2313172
+if  (cur2roc- ta.roc(ohlc4,10) > 0 and bondcorrelation < 0.1) and timeConditions.isMarketHours
+    backgroundcolor := #1bdf4972
+if bondcorrelation > 0.3
+    backgroundcolor := na
+
+if direction == 1 and cur < -0.005
+    //backgroundcolor := na
+    divergence := 0
+if direction == -1 and cur > 0.005
+    //backgroundcolor := na
+    divergence := 0
+if (confluencecor <= -5 or confluencecor2 <=-5) and confluencecor != close
+    backgroundcolor2 := #e2313172
+if (confluencecor >= 5 or confluencecor2>=5) and confluencecor != close
+    backgroundcolor2 := #1bdf4972
+if confluencecor < 5 and confluencecor > -5 and confluencecor2 < 5 and confluencecor2 > -5
+    backgroundcolor2 := na
+if close > smtfprevhi and strongbull
+    strongbullconfirmed := true
+if close < smtfprevlo and strongbear
+    strongbearconfirmed := true
+
+if strongbull and not strongbullconfirmed
+    label.set_xy(strongbull_label, bar_index, smtfprevhi)
+if strongbear and not strongbearconfirmed
+    label.set_xy(strongbear_label, bar_index, smtfprevlo)
+bgcolor(backgroundcolor, title='Bond ROC BG')
+bgcolor(backgroundcolor2, title='Multi Symbol Correlation ROC BG')
+plot(direction, title='Direction')
+plot(divergence, title='Divergence')
+
+// --- Volatility --- //
+voldisplay = input.bool(false, "Display Vol", tooltip="Enable to display volatility analysis on the chart.")
+vol = input.symbol('1/CBOE_DLY:VIX1D', 'Volatility', tooltip="Enter the ticker for the volatility index used in the analysis.")
+volprice = request.security(vol, timeframe.period, ohlc4)
+VolROCLen = input.int(defval = 10, title = "Vol Rate Of Change Length", tooltip="Set the period for the volatility ROC. Lower values increase sensitivity; higher values smooth the response.")
+VolCorLen = input.int(defval = 10, title = "Vol Correlation Length", tooltip="Set the period for the volatility correlation calculation. Lower values yield a more responsive indicator; higher values provide a smoother measure.")
+var float rocchange = 0
+var color volbackgroundcolor = na
+volcor = ta.correlation(volprice, ohlc4, VolCorLen)
+volroc = ta.roc(volprice, VolROCLen)
+priceroc = ta.roc(ohlc4, VolROCLen)
+VolPriceROCDiff = volroc - priceroc
+volrocaverage = ta.ema(VolPriceROCDiff, VolCorLen)
+
+if volrocaverage > 0 and volcor < 0 and volcor[1] < 0 and voldisplay and timeConditions.isMarketHours
+    volbackgroundcolor := color.rgb(255, 255, 255, 70)
+if volrocaverage < 0 and volcor < 0 and volcor[1] < 0 and voldisplay and timeConditions.isMarketHours
+    volbackgroundcolor := color.rgb(255, 255, 255, 70)
+if volcor >= 0.5 or not(timeConditions.isMarketHours)
+    volbackgroundcolor := na
+bgcolor(volbackgroundcolor, title='vol background color')
+
+var float smtfprevhi2 = na
+var float smtfprevlo2 = na
+var float orbhi = na
+var float orblo = na
+var float orbhh = na
+var float orbll = na
+var bool orbbreak = false
+
+if (hour(time) == 15)
+    orbhi := na
+    orblo := na
+    orbhh := na
+    orbll := na
+    orbbreak := false
+
+if timeLib.isInCustomTimeRange(6, 30, 7, 1) and str.contains(syminfo.ticker, "US500") and (high > orbhh or na(orbhh)) and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30')
+    orbhh := high
+if timeLib.isInCustomTimeRange(6, 30, 7, 1) and str.contains(syminfo.ticker, "US500") and (low < orbll or na(orbll)) and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30')
+    orbll := low
+if timeLib.isInCustomTimeRange(6, 30, 7, 1) and not na(orbhh) and str.contains(syminfo.ticker, "US500") and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30')
+    orbhi := orbhh
+if timeLib.isInCustomTimeRange(6, 30, 7, 1) and not na(orbll) and str.contains(syminfo.ticker, "US500") and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30')
+    orblo := orbll
+if orbbreak == false and (close > orbhh or close > orbhi) and str.contains(syminfo.ticker, "US500") and timeLib.isInCustomTimeRange(7, 1, 13, 0) and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30') and t4bullpercentage1 > 75
+    orbbreak := true
+    label.new(bar_index, high, 'Buy TD', color=color.rgb(64, 255, 150, 25), style=label.style_label_down, textcolor=#ffffff, size=size.small)
+
+if orbbreak == false and (close < orblo or close < orbll) and str.contains(syminfo.ticker, "US500") and timeLib.isInCustomTimeRange(7, 1, 13, 0) and timeframe.in_seconds(timeframe.period) <= timeframe.in_seconds('30') and t4bullpercentage1 < 25
+    orbbreak := true
+    label.new(bar_index, low, 'Sell TD', color=color.rgb(255, 36, 36, 25), style=label.style_label_up, textcolor=#ffffff, size=size.small)
+
+var bool entrybullbool = false
+var bool entrybearbool = false
+if direction == 1 and pricedirection == "up" and pricedirection[1] == "down" and entrylabels and entrybullbool == false
+    label.new(bar_index, low, 'Buy', color=#4fff27bf, style=label.style_label_up, textcolor=#ffffff, size=size.tiny)
+    entrybullbool := true
+    entrybearbool := false
+if direction == -1 and pricedirection == "down" and pricedirection[1] == "up" and entrylabels and entrybearbool == false
+    label.new(bar_index, high, 'Sell', color=#ff0000, style=label.style_label_down, textcolor=#ffffff, size=size.tiny)
+    entrybullbool := false
+    entrybearbool := true
+
+// Define the symbol to track for RRP
+symbol = "RRPONTSYD"
+rrpontsyd_data = request.security(symbol, "D", close)
+change = (rrpontsyd_data - rrpontsyd_data[1]) / 10000000
+show_label = input.bool(false, "Show RRP Label", tooltip="Enable to display a label with the daily RRP change. Useful for tracking reverse repo trends.")
+
+// Plot a label when the RRP value changes and the checkbox is enabled
+if rrpontsyd_data != rrpontsyd_data[1] and show_label
+    label.new(bar_index, high, "RRP: " + str.tostring(change, format.mintick), color=color.blue, textcolor=color.white)
+
+
+plotshape( (confluencecor >=5 and (confluencecor2 >= 5 or confluencecor2[1] >= 5 or confluencecor2[2] >= 5 or confluencecor2[3] >= 5 or confluencecor2[4] >= 5)) and confluencecor!=close and confluencecor2!= close and timeframe.multiplier <= 10, title="Triangle up", location=location.abovebar, size=size.normal, color=color.green, style=shape.triangleup, display=display.all - display.status_line)
+plotshape((confluencecor <=-5 and (confluencecor2 <= -5 or confluencecor2[1] <= -5 or confluencecor2[2] <= -5 or confluencecor2[3] <= -5 or confluencecor2[4] <= -5)) and confluencecor!=close and confluencecor2!= close and timeframe.multiplier <= 10, title="Triangle down", location=location.belowbar, size=size.normal, color=color.red, style=shape.triangledown, display=display.all - display.status_line)
