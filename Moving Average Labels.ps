@@ -2,6 +2,29 @@
 //============================================================================
 // TITLE: Moving Average Labels Indicator
 // DESCRIPTION: Displays various moving averages, VWAP lines, and price levels
+// AUTHOR: Joe Pieczynski
+//
+// FEATURES:
+// - Multiple timeframe moving averages (daily, weekly, monthly)
+// - Bollinger Bands visualization
+// - Multiple VWAP calculations (daily, weekly, monthly, quarterly, YTD)
+// - Price level tracking (current day, previous day, overnight)
+// - ES/SPY/SPX conversion for multi-instrument analysis
+// - Session-aware calculations with special handling for trading hours
+// - Breakout detection for key levels
+// - Bookmap level integration with automatic conversion
+// 
+// USAGE:
+// - Add to chart with US500 or related symbol for best results
+// - Use the "Vwap Symbol" and "Moving Average Symbol" inputs to adjust source data
+// - For futures/ETF correlation, use the Bookmap level inputs
+// - Colored labels indicate directional bias and breakouts
+//
+// OPTIMIZATION NOTES:
+// - Uses helper functions to reduce code duplication
+// - Consolidates security() calls for better performance
+// - Caches commonly reused calculations
+// - Reuses line/label objects to stay under TradingView limits
 //============================================================================
 
 //----------------------------------------

@@ -1,6 +1,22 @@
 // @version=5
-// @description Library of trend direction functions using pivot points
-library("MyReusableFunctions", overlay = true,dynamic_requests = true)
+// @description Library of reusable functions for trading indicators including trend detection and time management
+// @author Joe Pieczynski
+//
+// This library provides a collection of utility functions for TradingView indicators:
+// - Trend direction detection using pivot points
+// - Multi-timeframe and multi-symbol analysis capabilities
+// - Time-based functions for trading sessions and market hours
+// - Pre-computed time conditions for common market events
+//
+// USAGE:
+// 1. Add this script to your TradingView library (not chart)
+// 2. Import in other scripts using:
+//    import JoePieczynski/MyReusableFunctions/2 as myLib
+//
+// VERSIONING:
+// v2 - Added time management functions and TimeConditions type
+// v1 - Initial release with trend direction functions
+library("MyReusableFunctions", overlay = true, dynamic_requests = true)
 
 // Function to detect trend direction using current symbol and timeframe
 // @param pivotPeriod The period to use for pivot point detection

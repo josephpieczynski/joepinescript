@@ -1,8 +1,40 @@
 //@version=5
-// Author: DarioSoltani (modified by ChatGPT)
-// https://www.tradingview.com/u/DarioSoltani/
+//============================================================================
+// TITLE: Trading Hours Background Highlight with Market Dashboard
+// AUTHOR: DarioSoltani (modified by Joe Pieczynski)
 //
-// If you use this code in its original/modified form, do drop me a note.
+// DESCRIPTION:
+// This indicator provides two key features:
+// 1. Customizable session highlighting with UTC time-based backgrounds
+// 2. Real-time market dashboard showing correlated instruments with:
+//    - Daily and weekly breakout detection (PDH/PDL/PWH/PWL)
+//    - Percent change calculations across multiple instruments
+//    - Color-coded performance indication
+//
+// FEATURES:
+// - Configurable US trading session (default 08:30-16:00 UTC)
+// - European session highlighting (customizable)
+// - Lunch period identification
+// - Multi-instrument correlation dashboard
+// - HYG/IEI ratio tracking (risk sentiment)
+// - Sector rotation monitoring
+// - Oil, 10Y, VIX indicators for macro perspective
+//
+// USAGE:
+// - Customize session times in settings
+// - Position the dashboard in bottom-left corner
+// - Use breakout notifications for potential trading opportunities
+// - Monitor correlations between risk assets (HYG) and market performance
+//
+// OPTIMIZATION NOTES:
+// - Uses batch calculations to minimize security() calls
+// - Employs generic function for breakout detection
+// - Pre-calculates percent changes for dashboard efficiency
+//
+// ATTRIBUTION:
+// Original concept by DarioSoltani (https://www.tradingview.com/u/DarioSoltani/)
+// If you use this code in its original/modified form, please credit the author.
+//============================================================================
 
 indicator(title='Trading hours background highlight UTC based', shorttitle='Trading hours', overlay=true, max_labels_count=500)
 
