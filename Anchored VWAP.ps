@@ -1,0 +1,268 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © allanster on TradingView
+//
+//@version=5
+indicator("Anchored VWAP", overlay = true, max_lines_count = 500)
+
+colah = color.orange  // default color for pivot high VWAP
+colal = color.lime  // default color for pivot low VWAP
+colGrey = color.rgb(150, 150, 150)  // grey color for conditional display
+fillGreen = color.new(color.lime, 60)  // fill color for ohlc4 to pivot low VWAP
+fillOrange = color.new(color.orange, 60)  // fill color for ohlc4 to pivot high VWAP
+
+// External input signal
+signalInput = input(close, "Signal Input", tooltip="External signal: -1 (grey high AVWAP), 1 (grey low AVWAP), 0 (normal colors)")
+
+// Inputs for pivot high VWAP
+shoAH = input.bool   (true,    'Show Pivot High VWAP',                inline = 'H')
+srcAH = input.source (ohlc4,   'Source',                              inline = 'H')
+widAH = input.int    (3,       'Line Width',        minval = 1,       inline = 'H')
+colAH = input.color  (colah,   'Color',                               inline = 'H')
+plbAH = input.int    (8,       'Bars Left',         minval = 0,       inline = 'h')
+prbAH = input.int    (8,       'Bars Right',        minval = 0,       inline = 'h')
+
+// Inputs for pivot low VWAP
+shoAL = input.bool   (true,    'Show Pivot Low VWAP',                 inline = 'L')
+srcAL = input.source (ohlc4,   'Source',                              inline = 'L')
+widAL = input.int    (3,       'Line Width',        minval = 1,       inline = 'L')
+colAL = input.color  (colal,   'Color',                               inline = 'L')
+plbAL = input.int    (8,       'Bars Left',         minval = 0,       inline = 'l')
+prbAL = input.int    (8,       'Bars Right',        minval = 0,       inline = 'l')
+
+// Struct to store VWAP data
+type VWAPData
+    int anchorBar
+    float anchorPrice
+    float sumSV = 0.0
+    float sumV = 0.0
+    float lastValue = na
+    int lastUpdateBar = na
+    
+// Initialize VWAP data structures
+var VWAPData highVWAP = VWAPData.new()
+var VWAPData lowVWAP = VWAPData.new()
+
+// Arrays to store lines
+var line[] highVwapLines = array.new_line()
+var line[] lowVwapLines = array.new_line()
+
+// Determine colors based on signal input
+highVwapColor = signalInput == -1 ? colGrey : colAH
+lowVwapColor = signalInput == 1 ? colGrey : colAL
+upSymbolColor = signalInput == -1 ? colGrey : color.lime
+downSymbolColor = signalInput == 1 ? colGrey : color.orange
+
+// Clear previous lines
+clearLines(line[] lineArray) =>
+    if array.size(lineArray) > 0
+        for i = 0 to array.size(lineArray) - 1
+            line.delete(array.get(lineArray, i))
+        array.clear(lineArray)
+
+// Check for new pivot high
+pivotHigh = ta.pivothigh(high, plbAH, prbAH)
+if not na(pivotHigh) and shoAH
+    // Reset high VWAP data
+    highVWAP.anchorBar := bar_index - prbAH
+    highVWAP.anchorPrice := pivotHigh
+    highVWAP.sumSV := 0.0
+    highVWAP.sumV := 0.0
+    highVWAP.lastValue := na
+    highVWAP.lastUpdateBar := na
+    
+    // Clear existing lines
+    clearLines(highVwapLines)
+
+// Check for new pivot low
+pivotLow = ta.pivotlow(low, plbAL, prbAL)
+if not na(pivotLow) and shoAL
+    // Reset low VWAP data
+    lowVWAP.anchorBar := bar_index - prbAL
+    lowVWAP.anchorPrice := pivotLow
+    lowVWAP.sumSV := 0.0
+    lowVWAP.sumV := 0.0
+    lowVWAP.lastValue := na
+    lowVWAP.lastUpdateBar := na
+    
+    // Clear existing lines
+    clearLines(lowVwapLines)
+
+// Variables to store current VWAP values
+float vwapH = na
+float vwapL = na
+
+// Process high VWAP - OPTIMIZED with incremental calculation
+if not na(highVWAP.anchorBar) and shoAH
+    int barCount = bar_index - highVWAP.anchorBar + 1
+    
+    // Check if this is the first update or we need to recalculate from scratch
+    if na(highVWAP.lastValue) or na(highVWAP.lastUpdateBar) or highVWAP.lastUpdateBar != bar_index - 1
+        // First time calculation or non-consecutive update, clear and recalculate all
+        clearLines(highVwapLines)
+        highVWAP.sumSV := 0.0
+        highVWAP.sumV := 0.0
+        
+        // Full recalculation for non-consecutive updates
+        for i = 0 to barCount - 1
+            barIndex = barCount - 1 - i
+            highVWAP.sumSV += srcAH[barIndex] * volume[barIndex]
+            highVWAP.sumV += volume[barIndex]
+        
+        vwapH := highVWAP.sumV != 0 ? highVWAP.sumSV / highVWAP.sumV : na
+        
+        // Draw all historical lines
+        var float tempSumSV = 0.0
+        var float tempSumV = 0.0
+        
+        for i = 0 to barCount - 2  // exclude current bar
+            currentBarFromAnchor = highVWAP.anchorBar + i
+            nextBarFromAnchor = currentBarFromAnchor + 1
+            
+            if currentBarFromAnchor >= 0 and nextBarFromAnchor <= bar_index
+                // Calculate VWAP at current historical bar
+                tempSumSV := 0.0
+                tempSumV := 0.0
+                
+                for j = 0 to i
+                    idx = barCount - 1 - j
+                    tempSumSV += srcAH[idx] * volume[idx]
+                    tempSumV += volume[idx]
+                
+                float currentVwap = tempSumV != 0 ? tempSumSV / tempSumV : na
+                
+                // Calculate VWAP at next historical bar
+                tempSumSV := 0.0
+                tempSumV := 0.0
+                
+                for j = 0 to i + 1
+                    idx = barCount - 1 - j
+                    tempSumSV += srcAH[idx] * volume[idx]
+                    tempSumV += volume[idx]
+                
+                float nextVwap = tempSumV != 0 ? tempSumSV / tempSumV : na
+                
+                // Draw line between points if both values are valid
+                if not na(currentVwap) and not na(nextVwap)
+                    newLine = line.new(currentBarFromAnchor, currentVwap, nextBarFromAnchor, nextVwap, xloc.bar_index, extend.none, highVwapColor, width = widAH)
+                    array.push(highVwapLines, newLine)
+    else
+        // Consecutive update - just add the new bar's data
+        highVWAP.sumSV += srcAH[0] * volume[0]  // Current bar
+        highVWAP.sumV += volume[0]
+        
+        // Calculate new VWAP
+        vwapH := highVWAP.sumV != 0 ? highVWAP.sumSV / highVWAP.sumV : na
+        
+        // Add a new line connecting previous value to new value
+        if not na(highVWAP.lastValue) and not na(vwapH)
+            newLine = line.new(bar_index - 1, highVWAP.lastValue, bar_index, vwapH, xloc.bar_index, extend.none, highVwapColor, width = widAH)
+            array.push(highVwapLines, newLine)
+    
+    // Store values for next iteration
+    highVWAP.lastValue := vwapH
+    highVWAP.lastUpdateBar := bar_index
+else
+    vwapH := na
+    
+// Process low VWAP - OPTIMIZED with incremental calculation
+if not na(lowVWAP.anchorBar) and shoAL
+    int barCount = bar_index - lowVWAP.anchorBar + 1
+    
+    // Check if this is the first update or we need to recalculate from scratch
+    if na(lowVWAP.lastValue) or na(lowVWAP.lastUpdateBar) or lowVWAP.lastUpdateBar != bar_index - 1
+        // First time calculation or non-consecutive update, clear and recalculate all
+        clearLines(lowVwapLines)
+        lowVWAP.sumSV := 0.0
+        lowVWAP.sumV := 0.0
+        
+        // Full recalculation for non-consecutive updates
+        for i = 0 to barCount - 1
+            barIndex = barCount - 1 - i
+            lowVWAP.sumSV += srcAL[barIndex] * volume[barIndex]
+            lowVWAP.sumV += volume[barIndex]
+        
+        vwapL := lowVWAP.sumV != 0 ? lowVWAP.sumSV / lowVWAP.sumV : na
+        
+        // Draw all historical lines
+        var float tempSumSV = 0.0
+        var float tempSumV = 0.0
+        
+        for i = 0 to barCount - 2  // exclude current bar
+            currentBarFromAnchor = lowVWAP.anchorBar + i
+            nextBarFromAnchor = currentBarFromAnchor + 1
+            
+            if currentBarFromAnchor >= 0 and nextBarFromAnchor <= bar_index
+                // Calculate VWAP at current historical bar
+                tempSumSV := 0.0
+                tempSumV := 0.0
+                
+                for j = 0 to i
+                    idx = barCount - 1 - j
+                    tempSumSV += srcAL[idx] * volume[idx]
+                    tempSumV += volume[idx]
+                
+                float currentVwap = tempSumV != 0 ? tempSumSV / tempSumV : na
+                
+                // Calculate VWAP at next historical bar
+                tempSumSV := 0.0
+                tempSumV := 0.0
+                
+                for j = 0 to i + 1
+                    idx = barCount - 1 - j
+                    tempSumSV += srcAL[idx] * volume[idx]
+                    tempSumV += volume[idx]
+                
+                float nextVwap = tempSumV != 0 ? tempSumSV / tempSumV : na
+                
+                // Draw line between points if both values are valid
+                if not na(currentVwap) and not na(nextVwap)
+                    newLine = line.new(currentBarFromAnchor, currentVwap, nextBarFromAnchor, nextVwap, xloc.bar_index, extend.none, lowVwapColor, width = widAL)
+                    array.push(lowVwapLines, newLine)
+    else
+        // Consecutive update - just add the new bar's data
+        lowVWAP.sumSV += srcAL[0] * volume[0]  // Current bar
+        lowVWAP.sumV += volume[0]
+        
+        // Calculate new VWAP
+        vwapL := lowVWAP.sumV != 0 ? lowVWAP.sumSV / lowVWAP.sumV : na
+        
+        // Add a new line connecting previous value to new value
+        if not na(lowVWAP.lastValue) and not na(vwapL)
+            newLine = line.new(bar_index - 1, lowVWAP.lastValue, bar_index, vwapL, xloc.bar_index, extend.none, lowVwapColor, width = widAL)
+            array.push(lowVwapLines, newLine)
+    
+    // Store values for next iteration
+    lowVWAP.lastValue := vwapL
+    lowVWAP.lastUpdateBar := bar_index
+else
+    vwapL := na
+
+// When price crosses above/below pivot levels, clear the respective VWAP
+//if not na(highVWAP.anchorPrice) and close >= highVWAP.anchorPrice and array.size(highVwapLines) > 0
+//    clearLines(highVwapLines)
+//    highVWAP.lastValue := na
+//    vwapH := na
+
+//if not na(lowVWAP.anchorPrice) and close <= lowVWAP.anchorPrice and array.size(lowVwapLines) > 0
+//    clearLines(lowVwapLines)
+//    lowVWAP.lastValue := na
+//    vwapL := na
+
+// Plot the VWAPs for data window display
+plot(vwapH, title = 'Pivot High VWAP', color = color.new(highVwapColor, 100), linewidth = 1, display = display.data_window)
+plot(vwapL, title = 'Pivot Low VWAP', color = color.new(lowVwapColor, 100), linewidth = 1, display = display.data_window)
+
+// Plot price for fill reference
+pricePlot = plot(ohlc4, title = 'Price', color = color.new(color.white, 100), display = display.none)
+
+// Plot VWAPs for fill WITH position conditions
+highVwapPlot = plot(signalInput == 1 and ohlc4 < vwapH ? vwapH : na, title = 'High VWAP Fill', color = color.new(colAH, 100), display = display.none)
+lowVwapPlot = plot(signalInput == -1 and ohlc4 > vwapL ? vwapL : na, title = 'Low VWAP Fill', color = color.new(colAL, 100), display = display.none)
+
+// Add fills based on signalInput and price position
+fill(pricePlot, highVwapPlot, title = 'High VWAP Fill', color = fillOrange)
+fill(pricePlot, lowVwapPlot, title = 'Low VWAP Fill', color = fillGreen)
+
+// Plot shapes for VWAP crossovers with conditional colors
+plotshape(shoAH and ta.crossover(close[1], vwapH[1]) and close > vwapH, style = shape.triangleup, location = location.belowbar, color = upSymbolColor, size = size.small)
+plotshape(shoAL and ta.crossunder(close[1], vwapL[1]) and close < vwapL, style = shape.triangledown, location = location.abovebar, color = downSymbolColor, size = size.small)

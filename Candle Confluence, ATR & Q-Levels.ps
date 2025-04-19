@@ -1,0 +1,381 @@
+//@version=5
+indicator("Candle Confluence, ATR & Q-Levels", overlay=true, max_bars_back=1000, max_labels_count=500)
+
+//────────────────────────────────────────────────────────────────────────────
+// Import Time Library
+//────────────────────────────────────────────────────────────────────────────
+// Import the time library - replace Username with your TradingView username
+import JoePieczynski/MyReusableFunctions/2 as timeLib
+
+// Get time conditions from library
+timeConditions = timeLib.getTimeConditions()
+
+//────────────────────────────────────────────────────────────────────────────
+// INPUTS
+//────────────────────────────────────────────────────────────────────────────
+// (Inputs from the Candle Confluence part)
+symbol    = input.symbol("USI:TICK", "Main Comparison Security")
+sec2in    = input.symbol('FX_IDC:CADUSD+FX_IDC:JPYUSD*1000', "2nd Correlation Comparison Security", confirm=true)
+
+// (Inputs for Volume ATR / Relative Volume)
+enablePercentageOnChart = input.bool(title="Enable/Disable Showing RVOL % On Chart", defval=true)
+length       = input.int(14, title="ATR Period", minval=1)
+ATRThreshold = input.int(150, title="ATR Threshold", minval=1)
+smoothing    = input.string(title="Smoothing", defval="RMA", options=["RMA","SMA","EMA","WMA"])
+atrmultiplier= input.float(title="ATR Multiplier", defval=0.5, minval=0.01, maxval=100, step=0.05)
+avgCnt       = input.int(title="Number Of Bars Used For Averaging", defval=12)
+
+offset2      = input.int(title="Label Offset", defval=50)
+
+// (Inputs for Q‑Levels – see documentation for details)
+txt0         = input.string("$SPX: Put Support, 4200, 1D Exp Move Min, 4204.23, GEX Level 4, 4240, Put Support 0DTE & GEX Level 3, 4260, GEX Level 2, 4270, GEX Level 0 & HVL 0DTE, 4280, GEX Level 1, 4290, 1D Exp Move Max, 4291.13, HVL & Call Resistance 0DTE & Gamma Wall 0DTE, 4300, Call Resistance, 4400", title="Paste here the Txt File", confirm=true, tooltip="See https://www.menthorq.co/tradingview for info")
+Randomcolor    = input.bool(defval=false, title="Use Random Colors for Q-Levels")
+enableOptionsLevels = input.bool(defval=true, title="Enable Options Levels", group="Q-Levels Settings")
+levelColor = input.color(defval=color.blue, title="Q-Level Lines Color", group="Q-Levels Settings")
+
+//────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Candle Confluence Comparison (from the first script)
+//────────────────────────────────────────────────────────────────────────────
+
+// Get current candle direction
+candle_dir  = close > open ? 1 : close < open ? -1 : 0
+
+// More efficient retrieval of 5-minute data (reducing multiple security calls)
+[close5, open5] = request.security(syminfo.tickerid, "5", [close, open])
+candle_dir5 = close5 > open5 ? 1 : close5 < open5 ? -1 : 0
+
+// Get data from the "main" symbol (the TICK) - consolidate security calls
+[tick_close, tick_open, tick_high, tick_low, tick_ohlc] = request.security(symbol, timeframe.period, [close, open, high, low, ohlc4])
+[tick_close5, tick_open5] = request.security(symbol, "5", [close, open])
+
+// Calculate directions
+tick_dir  = tick_close > tick_open ? 1 : tick_close < tick_open ? -1 : 0
+tick_dir5 = tick_close5 > tick_open5 ? 1 : tick_close5 < tick_open5 ? -1 : 0
+
+// Additional data and ATR
+dxy       = request.security("1/DXY", timeframe.period, ohlc4)
+tick_atr  = request.security(symbol, timeframe.period, ta.atr(5))
+atr_5     = request.security(symbol, "5", ta.atr(5))
+
+// Check if current candle is "outside" its ATR range
+outside_atr  = (tick_open - tick_close > tick_atr) or (tick_open - tick_close < -tick_atr)
+outside_atr5 = (tick_open5 - tick_close5 > atr_5) or (tick_open5 - tick_close5 < -atr_5)
+
+// Common condition for bar colors (US500 during market hours)
+bool us500_market_hours = timeConditions.isMarketHours and str.contains(syminfo.ticker, "US500")
+
+// Check for zero crossing
+bool tick_crossing_zero = (tick_open > 1 and tick_close < 1) or (tick_open < 1 and tick_close > 1)
+bool tick5_crossing_zero = (tick_open5 > 1 and tick_close5 < 1) or (tick_open5 < 1 and tick_close5 > 1)
+
+// Color the bars more efficiently
+color bar_color = na
+if us500_market_hours
+    if outside_atr[1] and outside_atr and (tick_dir[1] == candle_dir[1]) and (tick_dir == candle_dir)
+        bar_color := color.rgb(19,134,228,19)
+    else if outside_atr5 and tick5_crossing_zero
+        bar_color := color.rgb(255,111,0)
+    else if outside_atr and tick_crossing_zero
+        bar_color := color.rgb(228,123,19,19)
+    else if outside_atr
+        bar_color := color.yellow
+
+barcolor(bar_color, title="ATR Bar Color")
+
+// Some additional "shape" logic
+higher_candle      = ohlc4 > ohlc4[1]
+lower_candle       = ohlc4 < ohlc4[1]
+higher_tick_candle = tick_ohlc > tick_ohlc[1]
+higher_tick2_candle= tick_ohlc > tick_ohlc[2]
+lower_tick_candle  = tick_ohlc < tick_ohlc[1]
+lower_tick2_candle = tick_ohlc < tick_ohlc[2]
+
+var float upshapecount = 0.0
+var int   trigger_time_upshape = 0
+upshapesize = size.auto
+if (timeConditions.isMarketHours and tick_ohlc > 250 and ohlc4 <= ohlc4[1] and (higher_tick_candle or higher_tick2_candle)) or 
+   (timeConditions.isMarketHours and tick_close > 250 and ohlc4 <= ohlc4[1] and tick_open < tick_close and tick_close > tick_high[2] and tick_close > tick_high[1]) or 
+   (timeConditions.isMarketHours and tick_close > tick_high[1] and tick_close > tick_high[2] and tick_close > tick_high[3] and tick_close > tick_high[4] and tick_close > 0)
+    trigger_time_upshape := timestamp(year, month, dayofmonth, hour, minute)
+    upshapecount += 1
+if (timeConditions.isMarketHours and tick_ohlc < -250 and ohlc4 >= ohlc4[1] and (lower_tick_candle or lower_tick2_candle)) or 
+   (timeConditions.isMarketHours and tick_close < -250 and ohlc4 >= ohlc4[1] and tick_open < tick_close and tick_close < tick_low[2] and tick_close < tick_low[1]) or 
+   (timeConditions.isMarketHours and tick_close < tick_low[1] and tick_close < tick_low[2] and tick_close < tick_low[3] and tick_close < tick_low[4] and tick_close < 0)
+    trigger_time_upshape := timestamp(year, month, dayofmonth, hour, minute)
+    upshapecount -= 1
+if (time - trigger_time_upshape) > 45 * 30 * 1000
+    upshapecount := 0
+
+// Common label style properties
+var color EMOJI_BG_COLOR = color.rgb(240,197,112,100)
+bool show_emoji_condition = timeConditions.isMarketHours and 
+                           str.contains(syminfo.ticker, "US500") and 
+                           timeframe.multiplier <= 10 and
+                           tick_ohlc != tick_ohlc[1] and 
+                           tick_ohlc != tick_ohlc[2]
+
+// Check for consecutive up candles
+bool four_consecutive_up = tick_open < tick_close and 
+                          tick_open[1] < tick_close[1] and 
+                          tick_open[2] < tick_close[2] and 
+                          tick_open[3] < tick_close[3]
+
+// Check for consecutive down candles
+bool four_consecutive_down = tick_open > tick_close and tick_open[1] > tick_close[1] and tick_open[2] > tick_close[2] and tick_open[3] > tick_close[3]
+
+// Plot emoji labels efficiently
+if show_emoji_condition
+    if four_consecutive_up
+        label.new(bar_index, high, "🚀", color=EMOJI_BG_COLOR, style=label.style_label_down, textcolor=color.black, size=size.small)
+    else if four_consecutive_down
+        label.new(bar_index, high, "💀", color=EMOJI_BG_COLOR, style=label.style_label_down, textcolor=color.black, size=size.small)
+
+// 2nd correlation comparison using the second symbol (sec2in) via pivot analysis
+[sec2_roc, sec2_ohlc4] = request.security(sec2in, timeframe.period, [ta.roc(ohlc4, 10) - ta.roc(ohlc4, 10), ohlc4])
+sec2_cor   = ta.correlation(sec2_ohlc4, ohlc4, 10)
+
+plotshape(timeConditions.isMarketHours and sec2_roc > 0 and sec2_cor <= 0.1 and timeframe.multiplier <= 10, title="Triangle up", location=location.abovebar, size=size.small, color=color.purple, style=shape.triangleup, display=display.all - display.status_line)
+plotshape(timeConditions.isMarketHours and sec2_roc <= 0 and sec2_cor <= 0.1 and timeframe.multiplier <= 10, title="Triangle down", location=location.belowbar, size=size.small, color=color.purple, style=shape.triangledown, display=display.all - display.status_line)
+
+
+//────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Volume ATR and Relative Volume (OPTIMIZED)
+//────────────────────────────────────────────────────────────────────────────
+
+// Get "vold" data from USI:TICK - consolidate security calls
+// Note: We're using symbol variable here to be consistent with earlier TICK queries
+[vold_open, vold_high, vold_low, vold_close, vold_ohlc] = request.security(symbol, timeframe.period, [open, high, low, close, ohlc4])
+[vold_openp, vold_highp, vold_lowp, vold_closep, vold_ohlcp] = request.security(symbol, timeframe.period, [open[1], high[1], low[1], close[1], ohlc4[1]])
+
+// These calculations are now redundant since we can request ohlc4 directly
+vold  = vold_ohlc
+voldp = vold_ohlcp
+
+var int trigger_time_vol      = 0
+var int trigger_time_tick_up  = 0
+var int trigger_time_tick_down= 0
+var int trigger_time_bottom   = 0
+var int trigger_time_top      = 0
+var color bordercolor         = na
+var bool  bottom              = false
+var bool  top                 = false
+var float tophigh             = na
+var float bottomlow           = na
+var int   topbottom           = 0
+
+// Use a separate ATR for volume (renamed here to "vol_atr")
+vol_atr = request.security("USI:TICK", timeframe.period, ta.atr(5))
+outside_atr_vol = (vold_open - vold_close > vol_atr) or (vold_open - vold_close < -vol_atr)
+if outside_atr_vol and vold_open < vold_close
+    trigger_time_tick_up := timestamp(year, month, dayofmonth, hour, minute)
+if outside_atr_vol and vold_open > vold_close
+    trigger_time_tick_down := timestamp(year, month, dayofmonth, hour, minute)
+
+// Simple moving average function (with selectable smoothing)
+ma_function(source, len) =>
+    smoothing == "RMA" ? ta.rma(source, len) :smoothing == "SMA" ? ta.sma(source, len) :smoothing == "EMA" ? ta.ema(source, len) : ta.wma(source, len)
+catr   = ma_function(ta.tr(true), length)
+atrVal = catr * atrmultiplier
+
+// OPTIMIZED: Calculate average volumes using built-in moving averages instead of arrays
+// This is more efficient and cleaner
+vol_current = volume
+spyvol = request.security("AMEX:SPY", timeframe.period, volume)
+ESvol = request.security("CME_MINI:ES1!", timeframe.period, volume)
+
+// Use the ma_function for consistent smoothing method across all calculations
+currentAvgVol = ma_function(vol_current, avgCnt)
+spycurrentAvgVol = ma_function(spyvol, avgCnt)
+EScurrentAvgVol = ma_function(ESvol, avgCnt)
+
+// Calculate percentage of current volume relative to average
+currentResolutionPercentAvg = math.round(vol_current / currentAvgVol * 100, 0)
+spycurrentResolutionPercentAvg = math.round(spyvol / spycurrentAvgVol * 100, 0)
+EScurrentResolutionPercentAvg = math.round(ESvol / EScurrentAvgVol * 100, 0)
+
+// Calculate total percentage based on ticker
+totalcurrentResolutionPercentAvg = str.contains(syminfo.ticker, "US500") ? math.round((EScurrentResolutionPercentAvg + spycurrentResolutionPercentAvg) / 2) : math.round(currentResolutionPercentAvg)
+
+pColor = vold_close < 0 ? color.rgb(232,110,110) : (vold_close > 0 ? color.rgb(130,193,98) : color.white)
+codiff = totalcurrentResolutionPercentAvg >= ATRThreshold ? 1 : 0
+
+if codiff > 0 and enablePercentageOnChart and timeframe.multiplier <= 10 
+    label.new(bar_index, high, text=str.tostring(totalcurrentResolutionPercentAvg) + "%", color=color.white, textcolor=pColor, size=size.normal, style=label.style_none, yloc=yloc.belowbar)
+    trigger_time_vol := timestamp(year, month, dayofmonth, hour, minute)
+
+// Define common time conditions once to avoid repetition
+bool is_valid_tick_time = timeConditions.isMarketHours and 
+                         str.contains(syminfo.ticker, "US500") and 
+                         timeframe.in_seconds(timeframe.period) > 60
+                         
+// Constants for time calculations (in milliseconds)
+var int TICK_TIME_WINDOW = 15 * 30 * 1000  // 7.5 minutes
+var int VOL_TIME_WINDOW = 15 * 60 * 1000   // 15 minutes
+
+// Plot potential top/bottom signals - optimized with common conditions
+if trigger_time_vol != 0 and 
+   trigger_time_tick_up != 0 and 
+   (time - trigger_time_tick_up) < TICK_TIME_WINDOW and 
+   (time - trigger_time_vol) < VOL_TIME_WINDOW and 
+   is_valid_tick_time
+    
+    if ((vold_close > vold_high[1] and vold_close > vold_high[2] and vold_close > vold_high[3]) or (vold_open < 0 and vold_close > 0))
+        bordercolor := color.rgb(236,249,56)
+        label.new(bar_index, low, "Bottom", color=color.rgb(238,255,0), style=label.style_label_up, textcolor=color.black, size=size.small)
+        bottom := true
+        trigger_time_bottom := timestamp(year, month, dayofmonth, hour, minute)
+        bottomlow := low
+        topbottom := 1
+    trigger_time_tick_up := 0
+
+if trigger_time_vol != 0 and 
+   trigger_time_tick_down != 0 and 
+   (time - trigger_time_tick_down) < TICK_TIME_WINDOW and 
+   (time - trigger_time_vol) < VOL_TIME_WINDOW and 
+   is_valid_tick_time
+    
+    if ((vold_close < vold_low[1] and vold_close < vold_low[2] and vold_close < vold_low[3]) or (vold_open > 0 and vold_close < 0))
+        bordercolor := color.rgb(249,56,194)
+        label.new(bar_index, high, "Top", color=color.rgb(255,82,232,38), style=label.style_label_down, textcolor=color.white, size=size.small)
+        top := true
+        topbottom := -1
+        trigger_time_top := timestamp(year, month, dayofmonth, hour, minute)
+        tophigh := high
+    trigger_time_tick_down := 0
+
+plot(topbottom, title="Top/Bottom")
+alertcondition(bottom, "Potential Bottom", "Potential Bottom")
+alertcondition(top, "Potential Top", "Potential Top")
+alertcondition(bottom or top, "Potential Bottom/Top", "Potential Bottom/Top")
+plotcandle(na, na, na, na, bordercolor=bordercolor)
+
+
+//────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Q-Levels Indicator (OPTIMIZED WITH CONSOLIDATED PLOTS)
+//────────────────────────────────────────────────────────────────────────────
+import PineCoders/VisibleChart/4
+
+// Replace "SPX" with "US500" in the input text 
+txt = str.replace_all(txt0, "SPX", "US500")
+
+// Parse the text input once and extract the relevant data
+DividedTickers = str.split(txt, "$")
+string exported = ""
+ 
+// Find our ticker section
+for i = 0 to array.size(DividedTickers) - 1
+    arr = str.split(array.get(DividedTickers, i), ": ")
+    if array.size(arr) >= 2 and syminfo.ticker == str.upper(array.get(arr, 0))
+        exported := array.get(arr, 1)
+        break  // Exit loop once we find our ticker
+        
+// Split the data into individual strings
+var array<string> Dividedstrings = str.split(exported, ", ")
+var array<float> levelValues = array.new_float(10, na)  // Pre-allocate array for level values
+var array<string> levelDescriptions = array.new_string(10, "")  // Pre-allocate array for descriptions
+var bool hasGEXLevel = false
+
+// Process the divided strings array only once
+if barstate.isfirst and array.size(Dividedstrings) > 0
+    // Extract numerical values and descriptions
+    for i = 0 to math.min(array.size(Dividedstrings) - 1, 19)
+        if i % 2 == 1  // Numerical values are at odd indices
+            idx = math.floor(i / 2)
+            if idx < array.size(levelValues)
+                array.set(levelValues, idx, str.tonumber(array.get(Dividedstrings, i)))
+        else  // Descriptions are at even indices
+            idx = math.floor(i / 2)
+            if idx < array.size(levelDescriptions)
+                desc = array.get(Dividedstrings, i)
+                array.set(levelDescriptions, idx, desc)
+                if str.contains(desc, "GEX")
+                    hasGEXLevel := true
+
+
+
+// Create labels and lines for options levels (on last confirmed bar only)
+if barstate.islastconfirmedhistory and enableOptionsLevels 
+    // Update our flag based on the pre-scanned data
+    enableOptionsLevels := enableOptionsLevels or hasGEXLevel
+    
+    // Use common white color with transparency for labels
+    var color labelColor = color.new(color.white, 10)
+    var color lineColor = color.white
+    
+    // Create labels and lines in one pass
+    for i = 0 to math.min(array.size(levelValues) - 1, 9)
+        value = array.get(levelValues, i)
+        desc = array.get(levelDescriptions, i)
+        
+        if not na(value) and desc != "" and not str.contains(desc, "GEX")
+            // Create label with description
+            label.new(bar_index + offset2, value, desc, xloc=xloc.bar_index, color=labelColor, size=size.small, style=label.style_none, textcolor=color.white, textalign=text.align_right)
+            
+            // Create horizontal line
+            line.new(bar_index, value, bar_index + 1, value, extend=extend.both, color=lineColor)
+
+// Additional Q-level pivot logic with boxes (renaming variables to avoid conflict)
+chart_pivlo = ta.pivotlow(low, 4, 4)
+chart_pivhi = ta.pivothigh(high, 4, 4)
+var string chart_direction = ""
+var float chart_prev_hi = na
+var float chart_prev_lo = na
+var int pivhicounter = na
+var int pivlocounter = na
+if not na(chart_pivhi)
+    chart_prev_hi := chart_pivhi
+    pivhicounter := 5
+if not na(chart_pivlo)
+    chart_prev_lo := chart_pivlo
+    pivlocounter := 5
+pivlocounter += 1
+pivhicounter += 1
+// Define box time window constant
+var int BOX_TIME_WINDOW = 15 * 240 * 1000  // 60 minutes
+
+// Box border and background colors
+var color BOX_BORDER_COLOR = color.rgb(255,255,255,57)
+var color TOP_BOX_BG_COLOR = color.rgb(245,94,94,80)
+var color BOTTOM_BOX_BG_COLOR = color.rgb(94,245,175,80)
+var color LABEL_COLOR = color.rgb(216,243,15,100)
+
+// Check for crossovers with optimized time checks
+bool bottom_time_valid = (time - trigger_time_bottom) < BOX_TIME_WINDOW
+bool top_time_valid = (time - trigger_time_top) < BOX_TIME_WINDOW
+
+if bottom_time_valid and ta.crossover(close, chart_prev_hi)
+    label.new(bar_index, low, "📈✅", color=LABEL_COLOR, style=label.style_label_up, textcolor=color.white, size=size.small)
+    trigger_time_bottom := na
+    
+if top_time_valid and ta.crossunder(close, chart_prev_lo)
+    label.new(bar_index, high, "👒✅", color=LABEL_COLOR, style=label.style_label_down, textcolor=color.white, size=size.small)
+    trigger_time_top := na
+
+// Create the boxes with optimized conditions
+var topbox = box.new(left=na, top=na, right=na, bottom=na, border_color=BOX_BORDER_COLOR, bgcolor=color.rgb(255,255,255,100))
+var bottombox = box.new(left=na, top=na, right=na, bottom=na, border_color=BOX_BORDER_COLOR, bgcolor=color.rgb(255,255,255,100))
+
+if top and close > chart_prev_lo
+    box.delete(topbox)
+    topbox := box.new(left=bar_index - pivlocounter, top=high, right=bar_index, bottom=chart_prev_lo, 
+                     border_color=BOX_BORDER_COLOR, bgcolor=TOP_BOX_BG_COLOR)
+                     
+if (top_time_valid and (close > tophigh or close < chart_prev_lo)) or not top_time_valid
+    box.delete(topbox)
+    
+if top_time_valid
+    box.set_right(topbox, bar_index[0])
+    
+if bottom and close < chart_prev_hi
+    box.delete(bottombox)
+    bottombox := box.new(left=bar_index - pivhicounter, top=low, right=bar_index, bottom=chart_prev_hi, border_color=BOX_BORDER_COLOR, bgcolor=BOTTOM_BOX_BG_COLOR)
+                        
+if (bottom_time_valid and (close < bottomlow or close > chart_prev_hi)) or not bottom_time_valid
+    box.delete(bottombox)
+    
+if bottom_time_valid
+    box.set_right(bottombox, bar_index[0])
+if top
+    top := false
+if bottom
+    bottom := false

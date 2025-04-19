@@ -1,0 +1,168 @@
+//@version=5
+indicator(title='Mega Weighted TICK', shorttitle='Mega TICK', overlay=true)
+
+dropn(src, n) =>
+    na(src[n]) ? na : src
+
+length1 = input.int(20, title='MA-1 period', minval=1)
+length2 = input.int(25, title='MA-2 period', minval=1)
+length3 = input.int(30, title='MA-3 period', minval=1)
+length4 = input.int(35, title='MA-4 period', minval=1)
+length5 = input.int(40, title='MA-5 period', minval=1)
+length6 = input.int(45, title='MA-6 period', minval=1)
+length7 = input.int(50, title='MA-7 period', minval=1)
+length8 = input.int(55, title='MA-8 period', minval=1)
+src = input(close, title='Source')
+mega = input(close, title='mega')
+
+dropCandles = input.int(1, minval=0, title='Drop first N candles')
+
+price = dropn(src, dropCandles)
+myColor = color.white
+
+if src > 0 and mega > ta.ema(mega,length1) 
+    myColor := color.green
+else if src > 0 //and mega < ta.ema(mega,length1) 
+    myColor := color.rgb(216, 229, 78)
+else if src < 0 and mega < ta.ema(mega,length1) 
+    myColor := color.red
+else if src < 0 //and mega > ta.ema(mega,length1) 
+    myColor := color.rgb(255, 148, 82)
+
+
+
+//plot(ta.ema(price, length1), title='MA-1', color=myColor, linewidth=2)
+//plot(ta.ema(price, length2), title='MA-2', color=color.new(#f5b771, 0), linewidth=2)
+//plot(ta.ema(price, length3), title='MA-3', color=color.new(#f5b056, 0), linewidth=2)
+//plot(ta.ema(price, length4), title='MA-4', color=color.new(#f57b4e, 0), linewidth=2)
+//plot(ta.ema(price, length5), title='MA-5', color=color.new(#f56d58, 0), linewidth=2)
+//plot(ta.ema(price, length6), title='MA-6', color=color.new(#f57d51, 0), linewidth=2)
+//plot(ta.ema(price, length7), title='MA-7', color=color.new(#f55151, 0), linewidth=2)
+//plot(ta.ema(price, length8), title='MA-8', color=color.new(#aa2707, 0), linewidth=2)
+
+
+bgcolor(ta.crossover(request.security("TICK", timeframe.period, high),1199)?color.green:na)
+
+bgcolor(ta.crossunder(request.security("TICK", timeframe.period, low),-1199)?color.red:na)
+correlation3 = ta.correlation(close, request.security("TICK", timeframe.period, close), 14)
+
+bgcolor(correlation3<0 and time(timeframe.period, "0830-1500") ?color.rgb(255, 255, 255, 89):na,title = "TICK BG")
+
+// Define the coefficients
+aapl_coef = 15.338
+msft_coef = 7.432
+goog_coef = 12.46
+amzn_coef = 10.34
+tsla_coef = 3.189
+meta_coef = 2.88
+nvda_coef = 24.62
+
+// Get the prices of each stock from the daily chart
+aapl = request.security("NASDAQ:AAPL", timeframe.period, ohlc4)
+msft =  request.security("NASDAQ:MSFT", timeframe.period, ohlc4)
+goog =  request.security("NASDAQ:GOOG", timeframe.period, ohlc4)
+amzn =  request.security("NASDAQ:AMZN", timeframe.period, ohlc4)
+tsla =  request.security("NASDAQ:TSLA", timeframe.period, ohlc4)
+meta =  request.security("NASDAQ:META", timeframe.period, ohlc4)
+nvda =  request.security("NASDAQ:NVDA", timeframe.period, ohlc4)
+tickopen =  request.security("TICK", timeframe.period, open)
+tickhigh =  request.security("TICK", timeframe.period, high)
+ticklow =  request.security("TICK", timeframe.period, low)
+tickclose =  request.security("TICK", timeframe.period, close)
+tickohlc =  request.security("TICK", timeframe.period, ohlc4)
+megaweight= aapl * aapl_coef + msft * msft_coef + goog * goog_coef + amzn * amzn_coef + tsla * tsla_coef + meta * meta_coef + nvda * nvda_coef
+megaweightchange = ta.roc(megaweight,1)*10
+tickopenweight = (math.abs((tickopen *1.5))*megaweightchange*1.5)+tickopen
+tickhighweight = (math.abs((tickhigh *1.5))*megaweightchange*1.5)+tickhigh
+ticklowweight = (math.abs((ticklow *1.5))*megaweightchange*1.5)+ticklow
+tickcloseweight = (math.abs((tickclose *1.5))*megaweightchange*1.5)+tickclose
+var color candlecolor = color.blue
+trueRange = na(tickhighweight[1])? tickhighweight-ticklowweight : math.max(math.max(tickhighweight - ticklowweight, math.abs(tickhighweight - tickcloseweight[1])), math.abs(ticklowweight - tickcloseweight[1]))
+atr = ta.rma(trueRange, 5)
+if math.abs(tickopenweight-tickcloseweight) > atr
+    candlecolor := color.yellow
+else if math.abs(tickopenweight-tickcloseweight) < atr
+    candlecolor := color.blue
+if tickopenweight > 1400
+    tickopenweight := 1400
+if tickopenweight < -1200
+    tickopenweight := -1200
+if tickhighweight > 1600
+    tickhighweight := 1600
+if tickhighweight < -1400
+    tickhighweight := -1400
+if ticklowweight > 1200
+    ticklowweight := 1200
+if ticklowweight < -1600
+    ticklowweight := -1600
+if tickcloseweight > 1400
+    tickcloseweight := 1400
+if tickcloseweight < -1400
+    tickcloseweight := -1400
+//if tickhighweight > 1400 or ticklowweight < -1400
+//    tickopenweight := 0
+//    tickhighweight := 0
+//    ticklowweight := 0
+//    tickcloseweight := 0
+//plot(megaweightchange,color=color.white)
+
+plotcandle(time(timeframe.period, "0831-1500")?tickopenweight:na,time(timeframe.period, "0831-1500")?tickhighweight:na,time(timeframe.period, "0831-1500")?ticklowweight:na,time(timeframe.period, "0831-1500")?tickcloseweight:na, color=candlecolor)
+plot(megaweightchange,color=color.green)
+//plot(math.abs(tickopenweight-tickcloseweight))
+aaplvolume = request.security("NASDAQ:AAPL", timeframe.period, volume)
+msftvolume =  request.security("NASDAQ:MSFT", timeframe.period, volume)
+googvolume =  request.security("NASDAQ:GOOG", timeframe.period, volume)
+amznvolume =  request.security("NASDAQ:AMZN", timeframe.period, volume)
+tslavolume =  request.security("NASDAQ:TSLA", timeframe.period, volume)
+metavolume =  request.security("NASDAQ:META", timeframe.period, volume)
+nvdavolume =  request.security("NASDAQ:NVDA", timeframe.period, volume)
+aaplvolumeavg = ta.sma(aaplvolume,12)
+msftvolumeavg =  ta.sma(msftvolume,12)
+googvolumeavg =  ta.sma(googvolume,12)
+amznvolumeavg =  ta.sma(amznvolume,12)
+tslavolumeavg =  ta.sma(tslavolume,12)
+metavolumeavg =  ta.sma(metavolume,12)
+nvdavolumeavg =  ta.sma(nvdavolume,12)
+
+aaplvolumeavgchng = ((aaplvolume - aaplvolumeavg) / aaplvolumeavg) * 100
+msftvolumeavgchng =  ((msftvolume - msftvolumeavg) / msftvolumeavg) * 100
+googvolumeavgchng =  ((googvolume - googvolumeavg) / googvolumeavg) * 100
+amznvolumeavgchng = ((amznvolume - amznvolumeavg) / amznvolumeavg) * 100
+tslavolumeavgchng =  ((tslavolume - tslavolumeavg) / tslavolumeavg) * 100
+metavolumeavgchng =  ((metavolume - metavolumeavg) / metavolumeavg) * 100
+nvdavolumeavgchng =  ((nvdavolume - nvdavolumeavg) / nvdavolumeavg) * 100
+
+megavolumeavg = math.round((aaplvolumeavgchng+msftvolumeavgchng+googvolumeavgchng+amznvolumeavgchng+tslavolumeavgchng+metavolumeavgchng+nvdavolumeavgchng)/7)
+if megavolumeavg > 30
+    label.new(y=-1600, x=bar_index, text=str.tostring(megavolumeavg), color=color.rgb(76, 175, 79, 100), style=label.style_label_up, textcolor=color.white)
+
+plot(megavolumeavg,color=color.white)
+
+smtfpivlo = ta.pivotlow(ticklow, 3, 3)
+smtfpivhi = ta.pivothigh(tickhigh, 3, 3)
+var direction = ""
+var float smtfprevhi = na
+var float smtfprevlo = na
+var color bgcolor = color.white
+
+if not na (smtfpivhi)
+    smtfprevhi:=smtfpivhi
+if not na (smtfpivlo)
+    smtfprevlo:=smtfpivlo
+if ta.crossover(tickclose,smtfprevhi)
+    direction := "up"
+    bgcolor := color.green
+if ta.crossunder(tickclose,smtfprevlo)
+    direction := "down"
+    bgcolor := color.red
+
+bgcolor(ta.crossover(tickclose,smtfprevhi)?color.rgb(26, 71, 27) : na, editable = true, transp=80)
+bgcolor(ta.crossunder(tickclose,smtfprevlo)?color.rgb(71, 26, 26) : na, editable = true, transp=80)
+var int tickdir = 0
+if ta.crossover(tickclose,smtfprevhi)
+    tickdir := 1
+if ta.crossunder(tickclose,smtfprevlo)
+    tickdir := -1
+
+plot(tickdir,title = "Tick Direction",color = #ffffff00)
+//plot(ta.roc(tickohlc,8))
