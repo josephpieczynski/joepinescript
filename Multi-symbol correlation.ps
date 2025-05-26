@@ -75,6 +75,8 @@ color1        = input.color(color.red, "Color", group=group_sym1, inline="s1")
 corrLookBack1 = input.int(15, "Correlation Lookback", minval=1, group=group_sym1, inline="s1")
 rocLookBack1  = input.int(20, "ROC Lookback", minval=1, group=group_sym1, inline="s1")
 cashOnly1     = input.bool(false, "Cash Only Symbol", group=group_sym1, inline="s1")
+corrThreshold1 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym1)
+weight1       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym1)
 
 // Symbol 2 Settings
 group_sym2 = "Symbol 2"
@@ -84,6 +86,8 @@ color2        = input.color(color.purple, "Color", group=group_sym2, inline="s2"
 corrLookBack2 = input.int(10, "Correlation Lookback", minval=1, group=group_sym2, inline="s2")
 rocLookBack2  = input.int(10, "ROC Lookback", minval=1, group=group_sym2, inline="s2")
 cashOnly2     = input.bool(true, "Cash Only Symbol", group=group_sym2, inline="s2")
+corrThreshold2 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym2)
+weight2       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym2)
 
 // Symbol 3 Settings
 group_sym3 = "Symbol 3"
@@ -93,6 +97,8 @@ color3        = input.color(color.yellow, "Color", group=group_sym3, inline="s3"
 corrLookBack3 = input.int(20, "Correlation Lookback", minval=1, group=group_sym3, inline="s3")
 rocLookBack3  = input.int(10, "ROC Lookback", minval=1, group=group_sym3, inline="s3")
 cashOnly3     = input.bool(false, "Cash Only Symbol", group=group_sym3, inline="s3")
+corrThreshold3 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym3)
+weight3       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym3)
 
 // Symbol 4 Settings
 group_sym4 = "Symbol 4"
@@ -102,6 +108,8 @@ color4        = input.color(#21ecf3, "Color", group=group_sym4, inline="s4")
 corrLookBack4 = input.int(10, "Correlation Lookback", minval=1, group=group_sym4, inline="s4")
 rocLookBack4  = input.int(10, "ROC Lookback", minval=1, group=group_sym4, inline="s4")
 cashOnly4     = input.bool(true, "Cash Only Symbol", group=group_sym4, inline="s4")
+corrThreshold4 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym4)
+weight4       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym4)
 
 // Symbol 5 Settings
 group_sym5 = "Symbol 5"
@@ -111,6 +119,8 @@ color5        = input.color(color.white, "Color", group=group_sym5, inline="s5")
 corrLookBack5 = input.int(20, "Correlation Lookback", minval=1, group=group_sym5, inline="s5")
 rocLookBack5  = input.int(10, "ROC Lookback", minval=1, group=group_sym5, inline="s5")
 cashOnly5     = input.bool(true, "Cash Only Symbol", group=group_sym5, inline="s5")
+corrThreshold5 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym5)
+weight5       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym5)
 
 // Symbol 6 Settings
 group_sym6 = "Symbol 6"
@@ -120,6 +130,8 @@ color6        = input.color(color.blue, "Color", group=group_sym6, inline="s6")
 corrLookBack6 = input.int(20, "Correlation Lookback", minval=1, group=group_sym6, inline="s6")
 rocLookBack6  = input.int(10, "ROC Lookback", minval=1, group=group_sym6, inline="s6")
 cashOnly6     = input.bool(false, "Cash Only Symbol", group=group_sym6, inline="s6")
+corrThreshold6 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym6)
+weight6       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym6)
 
 // Symbol 7 Settings
 group_sym7 = "Symbol 7"
@@ -129,6 +141,8 @@ color7        = input.color(color.orange, "Color", group=group_sym7, inline="s7"
 corrLookBack7 = input.int(20, "Correlation Lookback", minval=1, group=group_sym7, inline="s7")
 rocLookBack7  = input.int(20, "ROC Lookback", minval=1, group=group_sym7, inline="s7")
 cashOnly7     = input.bool(false, "Cash Only Symbol", group=group_sym7, inline="s7")
+corrThreshold7 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym7)
+weight7       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym7)
 
 // Symbol 8 Settings
 group_sym8 = "Symbol 8"
@@ -138,19 +152,21 @@ color8        = input.color(color.lime, "Color", group=group_sym8, inline="s8")
 corrLookBack8 = input.int(20, "Correlation Lookback", minval=1, group=group_sym8, inline="s8")
 rocLookBack8  = input.int(20, "ROC Lookback", minval=1, group=group_sym8, inline="s8")
 cashOnly8     = input.bool(false, "Cash Only Symbol", group=group_sym8, inline="s8")
+corrThreshold8 = input.float(-0.2, "Corr Threshold", minval=-1.0, maxval=1.0, step=0.1, group=group_sym8)
+weight8       = input.float(1.0, "Signal Weight", minval=0.1, maxval=5.0, step=0.1, group=group_sym8)
 
 
 // Base Close Calculation - IMPORTANT: using effectiveHigherTF
 baseClose = request.security(syminfo.tickerid, effectiveHigherTF, ohlc4)
 
-// Enhanced function to get signals and ROC differences
-f_getSignalAndROCDiff(sym, offs, tf, correlationLookBack, rocLookBack) =>
+// Enhanced function to get signals and ROC differences with custom correlation threshold
+f_getSignalAndROCDiff(sym, offs, tf, correlationLookBack, rocLookBack, corrThreshold) =>
     [symClose, corr_val, roc_val] = request.security(sym, tf, [ohlc4, ta.correlation(ohlc4, baseClose, correlationLookBack), ta.roc(ohlc4, rocLookBack)], lookahead = barmerge.lookahead_on)
     var float signal = na
     roc = ta.roc(ohlc4,rocLookBack)
     roc_diff = roc_val - roc
     
-    if (corr_val < -0.2)
+    if (corr_val < corrThreshold)
         signal := roc_diff > 0 and (roc_val[1]-roc[1] > 0 or na(signal[1])) ? float(offs) :
                   roc_diff < 0 and (roc_val[1]-roc[1] < 0 or na(signal[1])) ? float(-offs) : na
     else
@@ -159,50 +175,51 @@ f_getSignalAndROCDiff(sym, offs, tf, correlationLookBack, rocLookBack) =>
 
 // Helper to conditionally trigger signal based on Cash Only checkbox and custom time range
 // OPTIMIZATION: Use cached inTimeRange variable instead of calling the function repeatedly
-f_conditionalSignalAndROCDiff(cashOnly, sym, offs, tf, corrLB, rocLB) =>
+f_conditionalSignalAndROCDiff(cashOnly, sym, offs, tf, corrLB, rocLB, corrThreshold) =>
     // If the cash only checkbox is true and we're NOT in the specified time range, do not trigger signal
     if (cashOnly and not inTimeRange)
         [na, na]
     else
-        f_getSignalAndROCDiff(sym, offs, tf, corrLB, rocLB)
+        f_getSignalAndROCDiff(sym, offs, tf, corrLB, rocLB, corrThreshold)
 
 // Get signals and ROC differences for each symbol (Chart TF) - Using effectiveLowerTF
-[signal1_chart, roc_diff1_chart] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveLowerTF, corrLookBack1, rocLookBack1)
-[signal2_chart, roc_diff2_chart] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveLowerTF, corrLookBack2, rocLookBack2)
-[signal3_chart, roc_diff3_chart] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveLowerTF, corrLookBack3, rocLookBack3)
-[signal4_chart, roc_diff4_chart] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveLowerTF, corrLookBack4, rocLookBack4)
-[signal5_chart, roc_diff5_chart] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveLowerTF, corrLookBack5, rocLookBack5)
-[signal6_chart, roc_diff6_chart] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveLowerTF, corrLookBack6, rocLookBack6)
-[signal7_chart, roc_diff7_chart] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveLowerTF, corrLookBack7, rocLookBack7)
-[signal8_chart, roc_diff8_chart] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveLowerTF, corrLookBack8, rocLookBack8)
+[signal1_chart, roc_diff1_chart] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveLowerTF, corrLookBack1, rocLookBack1, corrThreshold1)
+[signal2_chart, roc_diff2_chart] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveLowerTF, corrLookBack2, rocLookBack2, corrThreshold2)
+[signal3_chart, roc_diff3_chart] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveLowerTF, corrLookBack3, rocLookBack3, corrThreshold3)
+[signal4_chart, roc_diff4_chart] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveLowerTF, corrLookBack4, rocLookBack4, corrThreshold4)
+[signal5_chart, roc_diff5_chart] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveLowerTF, corrLookBack5, rocLookBack5, corrThreshold5)
+[signal6_chart, roc_diff6_chart] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveLowerTF, corrLookBack6, rocLookBack6, corrThreshold6)
+[signal7_chart, roc_diff7_chart] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveLowerTF, corrLookBack7, rocLookBack7, corrThreshold7)
+[signal8_chart, roc_diff8_chart] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveLowerTF, corrLookBack8, rocLookBack8, corrThreshold8)
 
 // Get signals and ROC differences for each symbol (Higher TF) - Using effectiveHigherTF
-[signal1_higher, roc_diff1_higher] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveHigherTF, corrLookBack1, rocLookBack1)
-[signal2_higher, roc_diff2_higher] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveHigherTF, corrLookBack2, rocLookBack2)
-[signal3_higher, roc_diff3_higher] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveHigherTF, corrLookBack3, rocLookBack3)
-[signal4_higher, roc_diff4_higher] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveHigherTF, corrLookBack4, rocLookBack4)
-[signal5_higher, roc_diff5_higher] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveHigherTF, corrLookBack5, rocLookBack5)
-[signal6_higher, roc_diff6_higher] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveHigherTF, corrLookBack6, rocLookBack6)
-[signal7_higher, roc_diff7_higher] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveHigherTF, corrLookBack7, rocLookBack7)
-[signal8_higher, roc_diff8_higher] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveHigherTF, corrLookBack8, rocLookBack8)
+[signal1_higher, roc_diff1_higher] = f_conditionalSignalAndROCDiff(cashOnly1, sym1, offset1, effectiveHigherTF, corrLookBack1, rocLookBack1, corrThreshold1)
+[signal2_higher, roc_diff2_higher] = f_conditionalSignalAndROCDiff(cashOnly2, sym2, offset2, effectiveHigherTF, corrLookBack2, rocLookBack2, corrThreshold2)
+[signal3_higher, roc_diff3_higher] = f_conditionalSignalAndROCDiff(cashOnly3, sym3, offset3, effectiveHigherTF, corrLookBack3, rocLookBack3, corrThreshold3)
+[signal4_higher, roc_diff4_higher] = f_conditionalSignalAndROCDiff(cashOnly4, sym4, offset4, effectiveHigherTF, corrLookBack4, rocLookBack4, corrThreshold4)
+[signal5_higher, roc_diff5_higher] = f_conditionalSignalAndROCDiff(cashOnly5, sym5, offset5, effectiveHigherTF, corrLookBack5, rocLookBack5, corrThreshold5)
+[signal6_higher, roc_diff6_higher] = f_conditionalSignalAndROCDiff(cashOnly6, sym6, offset6, effectiveHigherTF, corrLookBack6, rocLookBack6, corrThreshold6)
+[signal7_higher, roc_diff7_higher] = f_conditionalSignalAndROCDiff(cashOnly7, sym7, offset7, effectiveHigherTF, corrLookBack7, rocLookBack7, corrThreshold7)
+[signal8_higher, roc_diff8_higher] = f_conditionalSignalAndROCDiff(cashOnly8, sym8, offset8, effectiveHigherTF, corrLookBack8, rocLookBack8, corrThreshold8)
 
-// Compute histogram sum in one line
-histogram_value = (not na(signal1_chart) ? (signal1_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal2_chart) ? (signal2_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal3_chart) ? (signal3_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal4_chart) ? (signal4_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal5_chart) ? (signal5_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal6_chart) ? (signal6_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal7_chart) ? (signal7_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal8_chart) ? (signal8_chart > 0 ? 1 : -1) : 0) +
-                  (not na(signal1_higher) ? (signal1_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal2_higher) ? (signal2_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal3_higher) ? (signal3_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal4_higher) ? (signal4_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal5_higher) ? (signal5_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal6_higher) ? (signal6_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal7_higher) ? (signal7_higher > 0 ? 1.5 : -1.5) : 0) +
-                  (not na(signal8_higher) ? (signal8_higher > 0 ? 1.5 : -1.5) : 0)
+// Compute histogram sum with custom weights
+// For higher timeframe, apply a 1.5x multiplier to the weight
+histogram_value = (not na(signal1_chart) ? (signal1_chart > 0 ? weight1 : -weight1) : 0) +
+                  (not na(signal2_chart) ? (signal2_chart > 0 ? weight2 : -weight2) : 0) +
+                  (not na(signal3_chart) ? (signal3_chart > 0 ? weight3 : -weight3) : 0) +
+                  (not na(signal4_chart) ? (signal4_chart > 0 ? weight4 : -weight4) : 0) +
+                  (not na(signal5_chart) ? (signal5_chart > 0 ? weight5 : -weight5) : 0) +
+                  (not na(signal6_chart) ? (signal6_chart > 0 ? weight6 : -weight6) : 0) +
+                  (not na(signal7_chart) ? (signal7_chart > 0 ? weight7 : -weight7) : 0) +
+                  (not na(signal8_chart) ? (signal8_chart > 0 ? weight8 : -weight8) : 0) +
+                  (not na(signal1_higher) ? (signal1_higher > 0 ? weight1 * 1.5 : -weight1 * 1.5) : 0) +
+                  (not na(signal2_higher) ? (signal2_higher > 0 ? weight2 * 1.5 : -weight2 * 1.5) : 0) +
+                  (not na(signal3_higher) ? (signal3_higher > 0 ? weight3 * 1.5 : -weight3 * 1.5) : 0) +
+                  (not na(signal4_higher) ? (signal4_higher > 0 ? weight4 * 1.5 : -weight4 * 1.5) : 0) +
+                  (not na(signal5_higher) ? (signal5_higher > 0 ? weight5 * 1.5 : -weight5 * 1.5) : 0) +
+                  (not na(signal6_higher) ? (signal6_higher > 0 ? weight6 * 1.5 : -weight6 * 1.5) : 0) +
+                  (not na(signal7_higher) ? (signal7_higher > 0 ? weight7 * 1.5 : -weight7 * 1.5) : 0) +
+                  (not na(signal8_higher) ? (signal8_higher > 0 ? weight8 * 1.5 : -weight8 * 1.5) : 0)
 
 // Define histogram color logic
 histogram_color = histogram_value >= 5 ? #00e6777e : histogram_value <= -5 ? #ff525280 : #2195f365
@@ -262,11 +279,14 @@ if not na(signal7_higher)
 if not na(signal8_higher)
     signal8_higher_state := signal8_higher > 0 ? 1 : -1
 
-// Calculate weighted sum using the same weighting as histogram_value
-float weighted_sum = signal1_chart_state * 1.0 + signal2_chart_state * 1.0 + signal3_chart_state * 1.0 + signal4_chart_state * 1.0 +signal5_chart_state * 1.0 + signal6_chart_state * 1.0 + signal7_chart_state * 1.0 + signal8_chart_state * 1.0 +signal1_higher_state * 1.5 + signal2_higher_state * 1.5 + signal3_higher_state * 1.5 + signal4_higher_state * 1.5 +signal5_higher_state * 1.5 + signal6_higher_state * 1.5 + signal7_higher_state * 1.5 + signal8_higher_state * 1.5
+// Calculate weighted sum using custom weights with 1.5x multiplier for higher timeframe
+float weighted_sum = signal1_chart_state * weight1 + signal2_chart_state * weight2 + signal3_chart_state * weight3 + signal4_chart_state * weight4 +signal5_chart_state * weight5 + signal6_chart_state * weight6 + signal7_chart_state * weight7 + signal8_chart_state * weight8 +signal1_higher_state * weight1 * 1.5 + signal2_higher_state * weight2 * 1.5 + signal3_higher_state * weight3 * 1.5 + signal4_higher_state * weight4 * 1.5 +signal5_higher_state * weight5 * 1.5 + signal6_higher_state * weight6 * 1.5 + signal7_higher_state * weight7 * 1.5 + signal8_higher_state * weight8 * 1.5
 
-// Scale from [-20, 20] to [-8, 8]
-float normalized_signal = weighted_sum * 0.4
+// Scale the weighted sum for normalized signal
+float max_possible_weight = weight1 + weight2 + weight3 + weight4 + weight5 + weight6 + weight7 + weight8 + 
+                           weight1 * 1.5 + weight2 * 1.5 + weight3 * 1.5 + weight4 * 1.5 + 
+                           weight5 * 1.5 + weight6 * 1.5 + weight7 * 1.5 + weight8 * 1.5
+float normalized_signal = weighted_sum * (8 / max_possible_weight)
 
 // Plot histogram with color logic (always show)
 plot(histogram_value, title="Divergence Histogram", color=histogram_color, style=plot.style_histogram, linewidth=2)
@@ -294,7 +314,7 @@ plot(signal6_chart, title="Signal 6 (Chart TF)", color=color6, style=plot.style_
 plot(signal7_chart, title="Signal 7 (Chart TF)", color=color7, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
 plot(signal8_chart, title="Signal 8 (Chart TF)", color=color8, style=plot.style_linebr, linewidth=2, display=showDetailedPlots ? display.all : display.none)
 
-// Alert conditions
+// Alert conditions - Using threshold values from histogram
 histogram_below_threshold = histogram_value <= -5 and histogram_value[1] > -5 and histogram_value[2] > -5 and histogram_value[3] > -5 and histogram_value[4] > -5
 histogram_above_threshold = histogram_value >= 5 and histogram_value[1] < 5 and histogram_value[2] < 5 and histogram_value[3] < 5 and histogram_value[4] < 5
 alertcondition(histogram_above_threshold or histogram_below_threshold, "All Multi Symbol Divergence", "All Multi Symbol Divergence")
